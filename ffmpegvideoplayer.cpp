@@ -297,6 +297,7 @@ void FFmpegVideoPlayer::decodeFrame()
                 m_displayLabel->setPixmap(pixmap.scaled(m_displayLabel->size(),
                                                          Qt::KeepAspectRatio,
                                                          Qt::SmoothTransformation));
+                emit frameReady(image);
             }
             break;
         } else if (ret == AVERROR(EAGAIN)) {

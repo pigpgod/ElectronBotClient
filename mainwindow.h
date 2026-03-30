@@ -24,6 +24,7 @@
 #include <QDataStream>
 
 #include "ffmpegvideoplayer.h"
+#include "electron_low_level.h"
 
 class MainWindow : public QMainWindow
 {
@@ -43,9 +44,7 @@ private slots:
     void sendScreenData();
     void startScreenCapture();
     void stopScreenCapture();
-    void tcpConnected();
-    void tcpDisconnected();
-    void tcpError(QAbstractSocket::SocketError);
+    void onFrameReady(const QImage &image);
 
 private:
     void setupUI();
@@ -64,10 +63,8 @@ private:
 
     QLabel *labelStatus;
 
-    QTcpSocket *tcpSocket;
-    QHostAddress botAddress;
-    quint16 botPort;
-
+    ElectronLowLevel *robot;
+    bool isUsbConnected;
     QTimer *captureTimer;
     bool isCapturing;
     int captureInterval;

@@ -38,6 +38,7 @@ signals:
     void durationChanged(qint64 duration);
     void stateChanged(int state);
     void playbackFinished();
+    void frameReady(const QImage &image);
 
 public slots:
     void setDisplayWidget(QLabel *label);

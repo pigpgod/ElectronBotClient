@@ -4,10 +4,10 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , videoPlayer(nullptr)
     , videoDisplayLabel(nullptr)
-    , tcpSocket(nullptr)
     , isCapturing(false)
     , captureInterval(50)
-    , botPort(6666)
+    , robot(nullptr)
+    , isUsbConnected(false)
 {
     videoPlayer = new FFmpegVideoPlayer(this);
     setupUI();
@@ -26,9 +26,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (tcpSocket) {
-        tcpSocket->disconnectFromHost();
-        delete tcpSocket;
+    if (robot) {
+        if (isUsbConnected) {
+            robot->Disconnect();
+        }
+        delete robot;
     }
     if (captureTimer) {
         captureTimer->stop();
@@ -81,7 +83,7 @@ void MainWindow::setupUI()
     btnPause->setEnabled(false);
     btnStop->setEnabled(false);
 
-    tcpSocket = new QTcpSocket(this);
+    robot = new ElectronLowLevel();
     captureTimer = new QTimer(this);
 }
 
@@ -95,28 +97,8 @@ void MainWindow::setupConnections()
     connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startScreenCapture()));
     connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopScreenCapture()));
 
-    connect(tcpSocket, SIGNAL(connected()), this, SLOT(tcpConnected()));
-    connect(tcpSocket, SIGNAL(disconnected()), this, SLOT(tcpDisconnected()));
-    connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(tcpError(QAbstractSocket::SocketError)));
-
     connect(captureTimer, SIGNAL(timeout()), this, SLOT(sendScreenData()));
-}
-
-void MainWindow::tcpConnected()
-{
-    labelStatus->setText("Connected to Bot");
-    btnConnect->setText("Disconnect");
-}
-
-void MainWindow::tcpDisconnected()
-{
-    labelStatus->setText("Disconnected");
-    btnConnect->setText("Connect to Bot");
-}
-
-void MainWindow::tcpError(QAbstractSocket::SocketError)
-{
-    QMessageBox::warning(this, "Connection Error", tcpSocket->errorString());
+    connect(videoPlayer, SIGNAL(frameReady(const QImage &)), this, SLOT(onFrameReady(const QImage &)));
 }
 
 void MainWindow::openFile()
@@ -160,17 +142,24 @@ void MainWindow::stopVideo()
 
 void MainWindow::connectToBot()
 {
-    if (tcpSocket->state() == QAbstractSocket::ConnectedState) {
-        tcpSocket->disconnectFromHost();
-        disconnectFromBot();
+    if (isUsbConnected) {
+        robot->Disconnect();
+        isUsbConnected = false;
+        labelStatus->setText("Disconnected");
+        btnConnect->setText("Connect to Bot");
+        btnStartCapture->setEnabled(false);
     } else {
-        bool ok;
-        QString ip = QInputDialog::getText(this, "Connect to ElectronBot",
-                                           "Enter Bot IP Address:",
-                                           QLineEdit::Normal, "192.168.1.100", &ok);
-        if (ok && !ip.isEmpty()) {
-            botAddress.setAddress(ip);
-            tcpSocket->connectToHost(botAddress, botPort);
+        if (robot->Connect()) {
+            isUsbConnected = true;
+            labelStatus->setText("Connected to Bot - Playing Video");
+            btnConnect->setText("Disconnect");
+            btnStartCapture->setEnabled(true);
+            if (videoPlayer->loadVideo(":/res/happy.mp4")) {
+                videoPlayer->setLooping(true);
+                videoPlayer->play();
+            }
+        } else {
+            QMessageBox::warning(this, "Connection Error", "Failed to connect to ElectronBot!");
         }
     }
 }
@@ -178,12 +167,17 @@ void MainWindow::connectToBot()
 void MainWindow::disconnectFromBot()
 {
     stopScreenCapture();
-    tcpSocket->disconnectFromHost();
+    if (robot && isUsbConnected) {
+        robot->Disconnect();
+        isUsbConnected = false;
+        labelStatus->setText("Disconnected");
+        btnConnect->setText("Connect to Bot");
+    }
 }
 
 void MainWindow::startScreenCapture()
 {
-    if (tcpSocket->state() != QAbstractSocket::ConnectedState) {
+    if (!isUsbConnected) {
         QMessageBox::warning(this, "Not Connected", "Please connect to ElectronBot first.");
         return;
     }
@@ -205,7 +199,7 @@ void MainWindow::stopScreenCapture()
 
 void MainWindow::sendScreenData()
 {
-    if (!isCapturing || tcpSocket->state() != QAbstractSocket::ConnectedState) {
+    if (!isCapturing || !isUsbConnected) {
         return;
     }
 
@@ -213,15 +207,18 @@ void MainWindow::sendScreenData()
     if (!screen) return;
 
     QPixmap pixmap = screen->grabWindow(QDesktopWidget().winId());
-    pixmap = pixmap.scaled(320, 240, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QImage image = pixmap.toImage();
 
-    QByteArray byteArray;
-    QBuffer buffer(&byteArray);
-    buffer.open(QIODevice::WriteOnly);
-    pixmap.save(&buffer, "JPG", 80);
+    robot->SetImageSrc(image);
 
-    QDataStream stream(tcpSocket);
-    stream << byteArray;
+    labelStatus->setText("Screen captured and sent");
+}
 
-    labelStatus->setText("Sending: " + QString::number(byteArray.size()) + " bytes");
+void MainWindow::onFrameReady(const QImage &image)
+{
+    if (!isUsbConnected) {
+        return;
+    }
+
+    robot->SetImageSrc(image);
 }
