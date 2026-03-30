@@ -1,0 +1,17 @@
+build/
+3rdparty/bin/*.dll
+3rdparty/lib/*.a
+temp/
+*.o
+*.obj
+*.exe
+*.dll
+.moc/
+qrc_*.cpp
+moc_*.cpp
+moc_predefs.h
+Makefile
+Makefile.*
+*.pro.user
+*.autosave
+.qmake.stash

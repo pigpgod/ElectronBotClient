@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>res/happy.mp4</file>
+    </qresource>
+</RCC>
