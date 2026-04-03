@@ -1,11 +1,11 @@
 #include "electron_low_level.h"
 #include "USBInterface.h"
-#include <QCoreApplication>
 
 ElectronLowLevel::ElectronLowLevel(QObject *parent)
     : QObject(parent)
     , workerThread(nullptr)
     , shouldStop(false)
+    , isTransmitting(false)
 {
 }
 
@@ -16,7 +16,29 @@ ElectronLowLevel::~ElectronLowLevel()
 
 bool ElectronLowLevel::Connect()
 {
-    if (isConnected) return true;
+    int devNum = USB_ScanDevice(USB_PID, USB_VID);
+    if (devNum <= 0)
+    {
+        isConnected = false;
+        return false;
+    }
+
+    if (workerThread != nullptr)
+    {
+        shouldStop = true;
+        if (workerThread->isRunning())
+        {
+            workerThread->quit();
+            workerThread->wait(1000);
+        }
+        if (workerThread->isRunning())
+        {
+            workerThread->terminate();
+            workerThread->wait();
+        }
+        delete workerThread;
+        workerThread = nullptr;
+    }
 
     shouldStop = false;
     workerThread = QThread::create([this]() {
@@ -33,11 +55,11 @@ bool ElectronLowLevel::Connect()
     for (int i = 0; i < 50; i++) {
         QThread::msleep(100);
         if (isConnected) {
-            emit connectionStatusChanged(true);
             return true;
         }
     }
 
+    emit connectFinished(false);
     return false;
 }
 
@@ -52,15 +74,31 @@ void ElectronLowLevel::runConnect()
             isConnected = true;
             timeStamp = 0;
 
+            QMetaObject::invokeMethod(this, [this]() {
+                emit connectionStatusChanged(true);
+            }, Qt::QueuedConnection);
+
             while (!shouldStop && isConnected)
             {
                 QMutexLocker locker(&dataMutex);
                 if (newFrameAvailable)
                 {
-                    newFrameAvailable = false;
-                    runSync();
+                    if (!isTransmitting)
+                    {
+                        newFrameAvailable = false;
+                        locker.unlock();
+                        if (!runSync())
+                        {
+                            isConnected = false;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        newFrameAvailable = false;
+                        locker.unlock();
+                    }
                 }
-                locker.unlock();
                 QThread::msleep(1);
             }
         }
@@ -73,10 +111,14 @@ bool ElectronLowLevel::Disconnect()
 
     shouldStop = true;
 
-    if (workerThread)
+    if (workerThread != nullptr)
     {
-        workerThread->quit();
-        if (!workerThread->wait(3000))
+        if (workerThread->isRunning())
+        {
+            workerThread->quit();
+            workerThread->wait(1000);
+        }
+        if (workerThread->isRunning())
         {
             workerThread->terminate();
             workerThread->wait();
@@ -104,13 +146,18 @@ void ElectronLowLevel::SetImageSrc(const QImage &image)
     newFrameAvailable = true;
 }
 
-void ElectronLowLevel::runSync()
+bool ElectronLowLevel::runSync()
 {
+    isTransmitting = true;
+
     uint32_t frameBufferOffset = 0;
     uint8_t index = pingPongWriteIndex;
     pingPongWriteIndex = pingPongWriteIndex == 0 ? 1 : 0;
 
-    if (pendingImage.isNull()) return;
+    if (pendingImage.isNull()) {
+        isTransmitting = false;
+        return true;
+    }
 
     QImage scaled = pendingImage.scaled(240, 240, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     QImage rgb = scaled.convertToFormat(QImage::Format_RGB888);
@@ -132,19 +179,33 @@ void ElectronLowLevel::runSync()
 
     for (int p = 0; p < 4; p++)
     {
-        ReceivePacket(reinterpret_cast<uint8_t*>(extraDataBufferRx), 1, 32);
+        if (!ReceivePacket(reinterpret_cast<uint8_t*>(extraDataBufferRx), 1, 32))
+        {
+            isTransmitting = false;
+            return false;
+        }
 
-        TransmitPacket(reinterpret_cast<uint8_t*>(frameBufferTx[index]) + frameBufferOffset, 84, 512);
+        if (!TransmitPacket(reinterpret_cast<uint8_t*>(frameBufferTx[index]) + frameBufferOffset, 84, 512))
+        {
+            isTransmitting = false;
+            return false;
+        }
         frameBufferOffset += 43008;
 
         memcpy(usbBuffer200, reinterpret_cast<uint8_t*>(frameBufferTx[index]) + frameBufferOffset, 192);
         memcpy(usbBuffer200 + 192, reinterpret_cast<uint8_t*>(extraDataBufferTx[index]), 32);
 
-        TransmitPacket(usbBuffer200, 1, 224);
+        if (!TransmitPacket(usbBuffer200, 1, 224))
+        {
+            isTransmitting = false;
+            return false;
+        }
         frameBufferOffset += 192;
     }
 
     timeStamp++;
+    isTransmitting = false;
+    return true;
 }
 
 bool ElectronLowLevel::ReceivePacket(uint8_t* _buffer, uint32_t _packetCount, uint32_t _packetSize)

@@ -4,7 +4,6 @@
 #include <QObject>
 #include <QThread>
 #include <QMutex>
-#include <QWaitCondition>
 #include <QImage>
 #include <cstdint>
 
@@ -31,18 +30,19 @@ public:
 
 signals:
     void connectionStatusChanged(bool connected);
+    void connectFinished(bool success);
 
 private:
     void runConnect();
-    void runSync();
+    bool runSync();
     bool ReceivePacket(uint8_t* _buffer, uint32_t _packetCount, uint32_t _packetSize);
     bool TransmitPacket(uint8_t* _buffer, uint32_t _packetCount, uint32_t _packetSize);
 
     QThread *workerThread;
     QMutex dataMutex;
-    QWaitCondition frameReady;
     bool newFrameAvailable = false;
     bool shouldStop = false;
+    bool isTransmitting = false;
 
     uint8_t pingPongWriteIndex = 0;
     uint8_t usbBuffer200[200]{};
