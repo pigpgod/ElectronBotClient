@@ -13,12 +13,14 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     ffmpegvideoplayer.cpp \
-    electron_low_level.cpp
+    electron_low_level.cpp \
+    appstyle.cpp
 
 HEADERS += \
     mainwindow.h \
     ffmpegvideoplayer.h \
-    electron_low_level.h
+    electron_low_level.h \
+    appstyle.h
 
 RESOURCES += \
     resources.qrc

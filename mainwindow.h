@@ -27,6 +27,7 @@
 
 #include "ffmpegvideoplayer.h"
 #include "electron_low_level.h"
+#include "appstyle.h"
 
 class CustomTitleBar : public QWidget
 {
@@ -207,6 +208,7 @@ private:
     GlowingButton *btnStopCapture;
 
     QLabel *labelStatus;
+    QLabel *versionLabel;
     StatusIndicator *statusLed;
 
     ElectronLowLevel *robot;

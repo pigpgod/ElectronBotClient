@@ -15,28 +15,13 @@ CustomTitleBar::CustomTitleBar(QWidget *parent)
     layout->setSpacing(12);
 
     QLabel *iconLabel = new QLabel("EB", this);
-    iconLabel->setStyleSheet(R"(
-        color: #E63946;
-        font-size: 22px;
-        font-family: 'Segoe UI', Arial;
-        font-weight: 900;
-    )");
+    iconLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 22, 900));
 
     titleLabel = new QLabel("ELECTRONBOT", this);
-    titleLabel->setStyleSheet(R"(
-        color: #ffffff;
-        font-family: 'Segoe UI', Arial;
-        font-size: 18px;
-        font-weight: 700;
-    )");
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 18, 700));
 
     QLabel *subtitleLabel = new QLabel("v3.0", this);
-    subtitleLabel->setStyleSheet(R"(
-        color: #E63946;
-        font-family: 'Segoe UI', Arial;
-        font-size: 11px;
-        font-weight: 600;
-    )");
+    subtitleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 11, 600));
 
     QVBoxLayout *titleLayout = new QVBoxLayout();
     titleLayout->setSpacing(1);
@@ -343,32 +328,19 @@ WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidg
     QLabel *titleLabel = new QLabel(title, this);
     titleLabel->setObjectName("titleLabel");
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet(R"(
-        color: #E63946;
-        font-family: 'Segoe UI', Arial;
-        font-size: 18px;
-        font-weight: 700;
-    )");
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 18, 700));
 
     loadingIndicator = new LoadingIndicator(this);
 
     messageLabel = new QLabel(message, this);
     messageLabel->setObjectName("messageLabel");
     messageLabel->setAlignment(Qt::AlignCenter);
-    messageLabel->setStyleSheet(R"(
-        color: #ffffff;
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-    )");
+    messageLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14));
 
     statusLabel = new QLabel("Please wait...", this);
     statusLabel->setObjectName("statusLabel");
     statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setStyleSheet(R"(
-        color: rgba(255,255,255,0.5);
-        font-family: 'Segoe UI', Arial;
-        font-size: 12px;
-    )");
+    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 12));
 
     containerLayout->addWidget(titleLabel);
     containerLayout->addWidget(loadingIndicator, 0, Qt::AlignCenter);
@@ -386,25 +358,27 @@ WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidg
         QString color = QString("rgb(%1,%2,%3)").arg(pulseR).arg(pulseG).arg(70);
         container->setStyleSheet(QString(R"(
             #container {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #16161a,
-                    stop:1 #111114);
-                border: 2px solid %1;
+                %1
+                border: 2px solid %2;
                 border-radius: 14px;
             }
             #titleLabel {
-                color: #E63946;
+                color: %3;
                 font-size: 18px;
             }
             #messageLabel {
-                color: #ffffff;
+                color: %4;
                 font-size: 14px;
             }
             #statusLabel {
-                color: rgba(255,255,255,0.5);
+                color: %5;
                 font-size: 12px;
             }
-        )").arg(color));
+        )").arg(AppStyle::dialogBackground())
+           .arg(color)
+           .arg(AppStyle::primaryColor)
+           .arg(AppStyle::whiteColor)
+           .arg(AppStyle::textSecondaryColor));
     });
     animationTimer->start(30);
 
@@ -429,12 +403,7 @@ void WaitingDialog::setMessage(const QString &message)
 void WaitingDialog::setSuccess(const QString &message)
 {
     statusLabel->setText(message);
-    statusLabel->setStyleSheet(R"(
-        color: #4CAF50;
-        font-family: 'Segoe UI', Arial;
-        font-size: 13px;
-        font-weight: 600;
-    )");
+    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 13, 600));
     animationTimer->stop();
     scanLineTimer->stop();
     loadingIndicator->setColor(QColor(76, 175, 80));
@@ -443,12 +412,7 @@ void WaitingDialog::setSuccess(const QString &message)
 void WaitingDialog::setFailed(const QString &message)
 {
     statusLabel->setText(message);
-    statusLabel->setStyleSheet(R"(
-        color: #E63946;
-        font-family: 'Segoe UI', Arial;
-        font-size: 13px;
-        font-weight: 600;
-    )");
+    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
     animationTimer->stop();
     scanLineTimer->stop();
     loadingIndicator->setColor(QColor(230, 57, 70));
@@ -498,26 +462,16 @@ void CustomMessageBox::setupUI(const QString &title, const QString &message, Ico
     QLabel *iconLabel = new QLabel(this);
     QString iconText, iconColor;
     switch (icon) {
-        case Information: iconText = "i"; iconColor = "#E63946"; break;
-        case Warning: iconText = "!"; iconColor = "#FF9800"; break;
-        case Error: iconText = "X"; iconColor = "#E63946"; break;
-        case Success: iconText = "OK"; iconColor = "#4CAF50"; break;
+        case Information: iconText = "i"; iconColor = AppStyle::primaryColor; break;
+        case Warning: iconText = "!"; iconColor = AppStyle::warningColor; break;
+        case Error: iconText = "X"; iconColor = AppStyle::primaryColor; break;
+        case Success: iconText = "OK"; iconColor = AppStyle::successColor; break;
     }
     iconLabel->setText(iconText);
-    iconLabel->setStyleSheet(QString(R"(
-        color: %1;
-        font-size: 28px;
-        font-family: 'Segoe UI', Arial;
-        font-weight: 900;
-    )").arg(iconColor));
+    iconLabel->setStyleSheet(AppStyle::labelStyle(iconColor, 28, 900));
 
     QLabel *titleLabel = new QLabel(title, this);
-    titleLabel->setStyleSheet(R"(
-        color: #ffffff;
-        font-family: 'Segoe UI', Arial;
-        font-size: 17px;
-        font-weight: 700;
-    )");
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 17, 700));
 
     titleLayout->addWidget(iconLabel);
     titleLayout->addSpacing(18);
@@ -526,11 +480,7 @@ void CustomMessageBox::setupUI(const QString &title, const QString &message, Ico
 
     QLabel *msgLabel = new QLabel(message, this);
     msgLabel->setWordWrap(true);
-    msgLabel->setStyleSheet(R"(
-        color: rgba(255,255,255,0.85);
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-    )");
+    msgLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.85)", 14));
 
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
@@ -546,18 +496,17 @@ void CustomMessageBox::setupUI(const QString &title, const QString &message, Ico
 
     mainLayout->addWidget(container);
 
-    setStyleSheet(R"(
+    setStyleSheet(QString(R"(
         QDialog {
             background: transparent;
         }
         #msgContainer {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #16161a,
-                stop:1 #111114);
-            border: 2px solid rgba(230, 57, 70, 0.5);
+            %1
+            border: 2px solid %2;
             border-radius: 14px;
         }
-    )");
+    )").arg(AppStyle::dialogBackground())
+       .arg(AppStyle::primaryColorAlpha(0.5)));
 }
 
 QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &color)
@@ -571,7 +520,7 @@ QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &c
             border: 2px solid rgba(%1, %2, %3, 0.7);
             border-radius: 8px;
             color: rgb(%1, %2, %3);
-            font-family: 'Segoe UI', Arial;
+            font-family: %4;
             font-size: 13px;
             font-weight: 700;
         }
@@ -579,7 +528,7 @@ QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &c
             background: rgba(%1, %2, %3, 0.3);
             border-color: rgb(%1, %2, %3);
         }
-    )").arg(color.red()).arg(color.green()).arg(color.blue()));
+    )").arg(color.red()).arg(color.green()).arg(color.blue()).arg(AppStyle::fontFamily));
     return btn;
 }
 
@@ -695,31 +644,13 @@ void MainWindow::setupUI()
     videoHeaderLayout->setContentsMargins(16, 12, 16, 12);
 
     QLabel *videoIcon = new QLabel("[VIDEO]", this);
-    videoIcon->setStyleSheet(R"(
-        color: #E63946;
-        font-size: 14px;
-        font-family: 'Segoe UI', Arial;
-        font-weight: 800;
-    )");
+    videoIcon->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 800));
 
     QLabel *videoTitle = new QLabel("LIVE PREVIEW", this);
-    videoTitle->setStyleSheet(R"(
-        color: #ffffff;
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-        font-weight: 700;
-    )");
+    videoTitle->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14, 700));
 
     QLabel *videoStatus = new QLabel("ONLINE", this);
-    videoStatus->setStyleSheet(R"(
-        color: #4CAF50;
-        font-family: 'Segoe UI', Arial;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 4px 12px;
-        background: rgba(76,175,80,0.15);
-        border-radius: 4px;
-    )");
+    videoStatus->setStyleSheet(AppStyle::statusBadgeStyle(AppStyle::successColor, AppStyle::successColorAlpha(0.15)));
 
     videoHeaderLayout->addWidget(videoIcon);
     videoHeaderLayout->addSpacing(12);
@@ -730,14 +661,12 @@ void MainWindow::setupUI()
     videoDisplayLabel = new QLabel(this);
     videoDisplayLabel->setMinimumSize(960, 560);
     videoDisplayLabel->setAlignment(Qt::AlignCenter);
-    videoDisplayLabel->setStyleSheet(R"(
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-            stop:0 #0d0d0d,
-            stop:0.5 #101010,
-            stop:1 #141414);
-        border: 2px solid rgba(230, 57, 70, 0.35);
+    videoDisplayLabel->setStyleSheet(QString(R"(
+        %1
+        border: 2px solid %2;
         border-radius: 10px;
-    )");
+    )").arg(AppStyle::videoDisplayBackground())
+       .arg(AppStyle::primaryColorAlpha(0.35)));
 
     QWidget *videoFooter = new QWidget(this);
     videoFooter->setObjectName("videoFooter");
@@ -745,20 +674,10 @@ void MainWindow::setupUI()
     videoFooterLayout->setContentsMargins(16, 8, 16, 8);
 
     QLabel *resolution = new QLabel("1920 x 1080", this);
-    resolution->setStyleSheet(R"(
-        color: rgba(255,255,255,0.45);
-        font-family: 'Segoe UI', Arial;
-        font-size: 11px;
-        font-weight: 500;
-    )");
+    resolution->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.45)", 11, 500));
 
     QLabel *fps = new QLabel("30 FPS", this);
-    fps->setStyleSheet(R"(
-        color: rgba(255,255,255,0.45);
-        font-family: 'Segoe UI', Arial;
-        font-size: 11px;
-        font-weight: 500;
-    )");
+    fps->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.45)", 11, 500));
 
     videoFooterLayout->addWidget(resolution);
     videoFooterLayout->addSpacing(20);
@@ -781,20 +700,10 @@ void MainWindow::setupUI()
     controlHeaderLayout->setContentsMargins(16, 12, 16, 12);
 
     QLabel *controlIcon = new QLabel("[CTRL]", this);
-    controlIcon->setStyleSheet(R"(
-        color: #E63946;
-        font-size: 14px;
-        font-family: 'Segoe UI', Arial;
-        font-weight: 800;
-    )");
+    controlIcon->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 800));
 
     QLabel *controlTitle = new QLabel("CONTROL PANEL", this);
-    controlTitle->setStyleSheet(R"(
-        color: #ffffff;
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-        font-weight: 700;
-    )");
+    controlTitle->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14, 700));
 
     controlHeaderLayout->addWidget(controlIcon);
     controlHeaderLayout->addSpacing(12);
@@ -847,27 +756,13 @@ void MainWindow::setupUI()
     statusLed = new StatusIndicator(this);
 
     QLabel *statusLabel = new QLabel("STATUS:", this);
-    statusLabel->setStyleSheet(R"(
-        color: rgba(255,255,255,0.55);
-        font-family: 'Segoe UI', Arial;
-        font-size: 13px;
-        font-weight: 600;
-    )");
+    statusLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.55)", 13, 600));
 
     labelStatus = new QLabel("SYSTEM READY", this);
-    labelStatus->setStyleSheet(R"(
-        color: #E63946;
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-        font-weight: 700;
-    )");
+    labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 700));
 
-    QLabel *versionLabel = new QLabel("v3.0.0", this);
-    versionLabel->setStyleSheet(R"(
-        color: rgba(255,255,255,0.25);
-        font-family: 'Segoe UI', Arial;
-        font-size: 11px;
-    )");
+    versionLabel = new QLabel("v3.0 | ElectronBot Client", this);
+    versionLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.25)", 11));
 
     statusLayout->addWidget(statusLed);
     statusLayout->addWidget(statusLabel);
@@ -913,27 +808,21 @@ void MainWindow::setupConnections()
 
 void MainWindow::applyStyleSheet()
 {
-    setStyleSheet(R"(
+    setStyleSheet(QString(R"(
         QMainWindow {
             background: transparent;
         }
         #mainContainer {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #121214,
-                stop:0.3 #151518,
-                stop:0.7 #131315,
-                stop:1 #0e0e10);
-            border: 1px solid rgba(230, 57, 70, 0.25);
+            %1
+            border: 1px solid %2;
             border-radius: 0px;
         }
         #videoContainer {
             background: transparent;
         }
         #videoHeader {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 rgba(230, 57, 70, 0.18),
-                stop:1 rgba(230, 57, 70, 0.06));
-            border: 1px solid rgba(230, 57, 70, 0.35);
+            %3
+            border: 1px solid %4;
             border-radius: 10px 10px 0 0;
         }
         #videoFooter {
@@ -945,31 +834,32 @@ void MainWindow::applyStyleSheet()
             background: transparent;
         }
         #controlHeader {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 rgba(230, 57, 70, 0.18),
-                stop:1 rgba(230, 57, 70, 0.06));
-            border: 1px solid rgba(230, 57, 70, 0.35);
+            %3
+            border: 1px solid %4;
             border-radius: 10px 10px 0 0;
         }
         #controlPanel {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(22, 22, 26, 0.95),
-                stop:1 rgba(16, 16, 19, 0.95));
-            border: 1px solid rgba(230, 57, 70, 0.2);
+            %5
+            border: 1px solid %6;
             border-top: none;
             border-radius: 0 0 10px 10px;
         }
         #statusPanel {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(28, 28, 33, 0.95),
-                stop:1 rgba(19, 19, 23, 0.95));
-            border: 1px solid rgba(230, 57, 70, 0.25);
+            %7
+            border: 1px solid %2;
             border-radius: 10px;
         }
         QLabel {
-            color: #e8e8e8;
+            color: %8;
         }
-    )");
+    )").arg(AppStyle::mainContainerBackground())
+       .arg(AppStyle::primaryColorAlpha(0.25))
+       .arg(AppStyle::headerGradient())
+       .arg(AppStyle::primaryColorAlpha(0.35))
+       .arg(AppStyle::controlPanelBackground())
+       .arg(AppStyle::primaryColorAlpha(0.2))
+       .arg(AppStyle::statusPanelBackground())
+       .arg(AppStyle::textPrimaryColor));
 }
 
 void MainWindow::showWaitingDialog(const QString &title, const QString &message)
@@ -1089,12 +979,7 @@ void MainWindow::onConnectionStatusChanged(bool connected)
         hideWaitingDialog();
 
         statusLed->setStatus(true);
-        labelStatus->setStyleSheet(R"(
-            color: #4CAF50;
-            font-family: 'Segoe UI', Arial;
-            font-size: 14px;
-            font-weight: 700;
-        )");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 14, 700));
         labelStatus->setText("CONNECTED TO ELECTRONBOT");
         btnConnect->setText("DISCONNECT");
         btnConnect->setEnabled(true);
@@ -1111,12 +996,7 @@ void MainWindow::onConnectionStatusChanged(bool connected)
 
         stopScreenCapture();
         statusLed->setStatus(false);
-        labelStatus->setStyleSheet(R"(
-            color: #E63946;
-            font-family: 'Segoe UI', Arial;
-            font-size: 14px;
-            font-weight: 700;
-        )");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 700));
         labelStatus->setText("SYSTEM READY");
         btnConnect->setText("CONNECT");
         btnConnect->setEnabled(true);
@@ -1146,12 +1026,7 @@ void MainWindow::startScreenCapture()
     btnStopCapture->setEnabled(true);
     videoPlayer->pause();
     captureTimer->start(captureInterval);
-    labelStatus->setStyleSheet(R"(
-        color: #AB47BC;
-        font-family: 'Segoe UI', Arial;
-        font-size: 14px;
-        font-weight: 700;
-    )");
+    labelStatus->setStyleSheet(AppStyle::labelStyle("#AB47BC", 14, 700));
     labelStatus->setText("SCREEN CAPTURE ACTIVE");
 }
 
@@ -1166,12 +1041,7 @@ void MainWindow::stopScreenCapture()
     videoPlayer->play();
 
     if (isUsbConnected) {
-        labelStatus->setStyleSheet(R"(
-            color: #4CAF50;
-            font-family: 'Segoe UI', Arial;
-            font-size: 14px;
-            font-weight: 700;
-        )");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 14, 700));
         labelStatus->setText("CONNECTED TO ELECTRONBOT");
     }
 }
