@@ -9,3 +9,25 @@ Makefile.*
 *.pro.user
 *.autosave
 .qmake.stash
+
+# IDE and tools
+.agents/
+.vscode/
+.idea/
+
+# Release files
+release/
+debug/
+
+# Object files
+*.o
+*.obj
+
+# Executables
+*.exe
+
+# DLLs in root (keep in 3rdparty)
+/*.dll
+
+# Patch files
+*.patch
