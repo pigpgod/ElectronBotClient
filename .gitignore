@@ -12,6 +12,7 @@ Makefile.*
 
 # IDE and tools
 .agents/
+.trae/
 .vscode/
 .idea/
 

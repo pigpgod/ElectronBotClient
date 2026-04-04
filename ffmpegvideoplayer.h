@@ -1,3 +1,15 @@
+/**
+ * @file ffmpegvideoplayer.h
+ * @brief FFmpeg 视频播放器类声明
+ * 
+ * 基于 FFmpeg 库的视频播放器：
+ * - 支持多种视频格式（MP4、AVI、MKV、MOV 等）
+ * - 视频解码和图像转换
+ * - 播放控制（播放、暂停、停止、跳转）
+ * - 循环播放支持
+ * - 帧信号输出（用于传输到机器人屏幕）
+ */
+
 #ifndef FFMPEGVIDEOPLAYER_H
 #define FFMPEGVIDEOPLAYER_H
 
@@ -21,7 +33,7 @@ class FFmpegVideoPlayer : public QWidget
     Q_OBJECT
 
 public:
-    explicit FFmpegVideoPlayer(QWidget *parent = nullptr);
+    explicit FFmpegVideoPlayer(QWidget *parent = 0);
     ~FFmpegVideoPlayer();
 
     bool loadVideo(const QString &filePath);

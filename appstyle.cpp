@@ -1,3 +1,14 @@
+/**
+ * @file appstyle.cpp
+ * @brief 应用程序样式管理类实现
+ * 
+ * 实现样式字符串生成函数：
+ * - 颜色常量定义
+ * - 带透明度的颜色生成
+ * - CSS 样式字符串生成
+ * - 渐变背景样式
+ */
+
 #include "appstyle.h"
 
 const QString AppStyle::primaryColor = "#E63946";

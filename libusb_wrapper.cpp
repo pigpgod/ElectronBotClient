@@ -1,3 +1,15 @@
+/**
+ * @file libusb_wrapper.cpp
+ * @brief libusb-win32 封装类实现
+ * 
+ * 实现 USB 设备的底层操作：
+ * - 设备初始化和释放
+ * - 设备扫描和打开
+ * - 批量数据读写（含 512 字节对齐的零长度包处理）
+ * - 设备连接状态检测
+ * - 接口声明和释放
+ */
+
 #include "libusb_wrapper.h"
 #include <lusb0_usb.h>
 

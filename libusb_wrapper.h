@@ -1,3 +1,14 @@
+/**
+ * @file libusb_wrapper.h
+ * @brief libusb-win32 封装类
+ * 
+ * 封装 libusb-win32 库的 USB 设备操作：
+ * - 设备扫描和打开
+ * - 批量数据读写
+ * - 设备连接状态检测
+ * - 接口声明和释放
+ */
+
 #ifndef LIBUSB_WRAPPER_H
 #define LIBUSB_WRAPPER_H
 

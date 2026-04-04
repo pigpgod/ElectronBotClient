@@ -1,3 +1,14 @@
+/**
+ * @file electron_low_level.h
+ * @brief ElectronBot 低层 USB 通信类
+ * 
+ * 负责 USB 设备的连接、断开、数据传输等功能：
+ * - 设备连接状态实时检测（50ms 间隔）
+ * - 图像数据传输到机器人屏幕
+ * - 关节角度数据收发
+ * - 额外数据收发
+ */
+
 #ifndef ELECTRONBOTSDK_ELECTRONLOWLEVEL_H
 #define ELECTRONBOTSDK_ELECTRONLOWLEVEL_H
 
@@ -14,7 +25,7 @@ class ElectronLowLevel : public QObject
     Q_OBJECT
 
 public:
-    explicit ElectronLowLevel(QObject *parent = nullptr);
+    explicit ElectronLowLevel(QObject *parent = 0);
     ~ElectronLowLevel();
 
     bool Connect();
@@ -24,38 +35,43 @@ public:
     void SetJointAngles(float j1, float j2, float j3, float j4, float j5, float j6,
                         bool enable = false);
     void GetJointAngles(float* jointAngles);
-    uint8_t* GetExtraData(uint8_t* data = nullptr);
+    uint8_t* GetExtraData(uint8_t* data = 0);
 
-    int USB_VID = 0x1001;
-    int USB_PID = 0x8023;
-    bool isConnected = false;
+    int USB_VID;
+    int USB_PID;
+    bool isConnected;
 
 signals:
     void connectionStatusChanged(bool connected);
     void connectFinished(bool success);
 
+private slots:
+    void onThreadFinished();
+    void onConnected();
+    void onDisconnected();
+
 private:
-    static constexpr int kImageSize = 240;
-    static constexpr int kExtraDataSize = 32;
-    static constexpr int kJointCount = 6;
-    static constexpr int kFrameBufferSize = kImageSize * kImageSize * 3;
-    static constexpr int kUsbTimeoutMs = 100;
-    static constexpr int kConnectTimeoutMs = 5000;
-    static constexpr int kConnectPollIntervalMs = 100;
-    static constexpr int kThreadWaitMs = 1000;
-    static constexpr int kDeviceCheckIntervalMs = 50;
-    static constexpr int kDeviceCheckLoopCount = kDeviceCheckIntervalMs;
+    static const int kImageSize = 240;
+    static const int kExtraDataSize = 32;
+    static const int kJointCount = 6;
+    static const int kFrameBufferSize = kImageSize * kImageSize * 3;
+    static const int kUsbTimeoutMs = 100;
+    static const int kConnectTimeoutMs = 5000;
+    static const int kConnectPollIntervalMs = 100;
+    static const int kThreadWaitMs = 1000;
+    static const int kDeviceCheckIntervalMs = 50;
+    static const int kDeviceCheckLoopCount = kDeviceCheckIntervalMs;
     
-    static constexpr int kEp1In = 0x81;
-    static constexpr int kEp1Out = 0x01;
+    static const int kEp1In = 0x81;
+    static const int kEp1Out = 0x01;
     
-    static constexpr int kPacketSize512 = 512;
-    static constexpr int kPacketSize224 = 224;
-    static constexpr int kPacketCount84 = 84;
-    static constexpr int kPacketCount1 = 1;
-    static constexpr int kFrameChunkSize = 43008;
-    static constexpr int kFrameTailSize = 192;
-    static constexpr int kTransferPhases = 4;
+    static const int kPacketSize512 = 512;
+    static const int kPacketSize224 = 224;
+    static const int kPacketCount84 = 84;
+    static const int kPacketCount1 = 1;
+    static const int kFrameChunkSize = 43008;
+    static const int kFrameTailSize = 192;
+    static const int kTransferPhases = 4;
 
     void runConnect();
     bool runSync();
@@ -68,19 +84,19 @@ private:
     QThread *workerThread;
     QMutex dataMutex;
     LibUsbWrapper* usb;
-    int deviceCheckCounter = 0;
-    bool connectSuccess = false;
-    bool newFrameAvailable = false;
-    bool shouldStop = false;
-    bool isTransmitting = false;
+    int deviceCheckCounter;
+    bool connectSuccess;
+    bool newFrameAvailable;
+    bool shouldStop;
+    bool isTransmitting;
 
-    uint8_t pingPongWriteIndex = 0;
-    uint8_t usbBuffer200[200]{};
-    uint8_t frameBufferTx[2][kFrameBufferSize]{};
-    uint8_t extraDataBufferTx[2][kExtraDataSize]{};
-    uint8_t extraDataBufferRx[kExtraDataSize]{};
+    uint8_t pingPongWriteIndex;
+    uint8_t usbBuffer200[200];
+    uint8_t frameBufferTx[2][kFrameBufferSize];
+    uint8_t extraDataBufferTx[2][kExtraDataSize];
+    uint8_t extraDataBufferRx[kExtraDataSize];
     QImage pendingImage;
-    uint32_t timeStamp = 0;
+    uint32_t timeStamp;
 };
 
 #endif

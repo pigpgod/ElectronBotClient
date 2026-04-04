@@ -1,3 +1,17 @@
+/**
+ * @file mainwindow.h
+ * @brief 主窗口类声明
+ * 
+ * 定义应用程序的主界面组件：
+ * - CustomTitleBar: 自定义标题栏（支持拖拽、最小化、最大化、关闭）
+ * - GlowingButton: 发光效果按钮
+ * - StatusIndicator: 连接状态指示灯
+ * - LoadingIndicator: 加载动画指示器
+ * - WaitingDialog: 等待对话框
+ * - CustomMessageBox: 自定义消息框
+ * - MainWindow: 主窗口类
+ */
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -34,13 +48,13 @@ class CustomTitleBar : public QWidget
     Q_OBJECT
 
 public:
-    explicit CustomTitleBar(QWidget *parent = nullptr);
+    explicit CustomTitleBar(QWidget *parent = 0);
     void setTitle(const QString &title);
 
 protected:
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mousePressEvent(QMouseEvent *event);
+    void mouseMoveEvent(QMouseEvent *event);
+    void mouseReleaseEvent(QMouseEvent *event);
 
 private slots:
     void onMinimizeClicked();
@@ -62,14 +76,17 @@ class GlowingButton : public QPushButton
     Q_PROPERTY(QColor glowColor READ glowColor WRITE setGlowColor)
 
 public:
-    explicit GlowingButton(const QString &text, QWidget *parent = nullptr);
+    explicit GlowingButton(const QString &text, QWidget *parent = 0);
     QColor glowColor() const { return m_glowColor; }
     void setGlowColor(const QColor &color);
 
 protected:
-    void enterEvent(QEvent *event) override;
-    void leaveEvent(QEvent *event) override;
-    void paintEvent(QPaintEvent *event) override;
+    void enterEvent(QEvent *event);
+    void leaveEvent(QEvent *event);
+    void paintEvent(QPaintEvent *event);
+
+private slots:
+    void onAnimationTimeout();
 
 private:
     QColor m_glowColor;
@@ -84,13 +101,16 @@ class StatusIndicator : public QWidget
     Q_PROPERTY(QColor ledColor READ ledColor WRITE setLedColor)
 
 public:
-    explicit StatusIndicator(QWidget *parent = nullptr);
+    explicit StatusIndicator(QWidget *parent = 0);
     void setStatus(bool connected);
     QColor ledColor() const { return m_ledColor; }
     void setLedColor(const QColor &color);
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
+    void paintEvent(QPaintEvent *event);
+
+private slots:
+    void onBlinkTimeout();
 
 private:
     QColor m_ledColor;
@@ -105,11 +125,14 @@ class LoadingIndicator : public QWidget
     Q_OBJECT
 
 public:
-    explicit LoadingIndicator(QWidget *parent = nullptr);
+    explicit LoadingIndicator(QWidget *parent = 0);
     void setColor(const QColor &color);
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
+    void paintEvent(QPaintEvent *event);
+
+private slots:
+    void onRotationTimeout();
 
 private:
     QColor m_color;
@@ -122,11 +145,18 @@ class WaitingDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit WaitingDialog(const QString &title, const QString &message, QWidget *parent = nullptr);
+    explicit WaitingDialog(const QString &title, const QString &message, QWidget *parent = 0);
     void setMessage(const QString &message);
     void setSuccess(const QString &message);
     void setFailed(const QString &message);
     void setProgressText(const QString &text);
+
+private slots:
+    void onAnimationTimeout();
+    void onScanLineTimeout();
+
+protected:
+    void paintEvent(QPaintEvent *event);
 
 private:
     QLabel *messageLabel;
@@ -135,9 +165,7 @@ private:
     int animValue;
     QTimer *animationTimer;
     QTimer *scanLineTimer;
-
-protected:
-    void paintEvent(QPaintEvent *event) override;
+    QWidget *containerWidget;
 };
 
 class CustomMessageBox : public QDialog
@@ -147,7 +175,7 @@ class CustomMessageBox : public QDialog
 public:
     enum IconType { Information, Warning, Error, Success };
 
-    explicit CustomMessageBox(const QString &title, const QString &message, IconType icon, QWidget *parent = nullptr);
+    explicit CustomMessageBox(const QString &title, const QString &message, IconType icon, QWidget *parent = 0);
     static QMessageBox::StandardButton information(QWidget *parent, const QString &title, const QString &message);
     static QMessageBox::StandardButton warning(QWidget *parent, const QString &title, const QString &message);
     static QMessageBox::StandardButton error(QWidget *parent, const QString &title, const QString &message);
@@ -163,11 +191,11 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
 protected:
-    void resizeEvent(QResizeEvent *event) override;
+    void resizeEvent(QResizeEvent *event);
 
 private slots:
     void openFile();
@@ -183,6 +211,7 @@ private slots:
     void onConnectionStatusChanged(bool connected);
     void onConnectFinished(bool success);
     void onWaitingDialogClosed();
+    void onDisconnectTimeout();
 
 private:
     void setupUI();

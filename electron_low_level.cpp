@@ -1,13 +1,32 @@
+/**
+ * @file electron_low_level.cpp
+ * @brief ElectronBot 低层 USB 通信类实现
+ * 
+ * 实现功能：
+ * - USB 设备连接/断开管理
+ * - 工作线程管理
+ * - 图像帧数据处理和传输
+ * - 关节角度和额外数据收发
+ */
+
 #include "electron_low_level.h"
 #include "libusb_wrapper.h"
 
 ElectronLowLevel::ElectronLowLevel(QObject *parent)
     : QObject(parent)
-    , workerThread(nullptr)
+    , workerThread(0)
     , usb(new LibUsbWrapper())
+    , deviceCheckCounter(0)
+    , connectSuccess(false)
+    , newFrameAvailable(false)
     , shouldStop(false)
     , isTransmitting(false)
+    , pingPongWriteIndex(0)
+    , timeStamp(0)
 {
+    USB_VID = 0x1001;
+    USB_PID = 0x8023;
+    isConnected = false;
     usb->init();
 }
 
@@ -19,7 +38,7 @@ ElectronLowLevel::~ElectronLowLevel()
 
 void ElectronLowLevel::stopWorkerThread()
 {
-    if (workerThread == nullptr) return;
+    if (workerThread == 0) return;
 
     shouldStop = true;
 
@@ -36,7 +55,7 @@ void ElectronLowLevel::stopWorkerThread()
     }
 
     delete workerThread;
-    workerThread = nullptr;
+    workerThread = 0;
 }
 
 bool ElectronLowLevel::Connect()
@@ -58,12 +77,7 @@ bool ElectronLowLevel::Connect()
         runConnect();
     });
 
-    connect(workerThread, &QThread::finished, this, [this]() {
-        if (!connectSuccess)
-        {
-            isConnected = false;
-        }
-    });
+    connect(workerThread, SIGNAL(finished()), this, SLOT(onThreadFinished()));
 
     workerThread->start();
 
@@ -83,6 +97,24 @@ bool ElectronLowLevel::Connect()
 
     stopWorkerThread();
     return false;
+}
+
+void ElectronLowLevel::onThreadFinished()
+{
+    if (!connectSuccess)
+    {
+        isConnected = false;
+    }
+}
+
+void ElectronLowLevel::onConnected()
+{
+    emit connectionStatusChanged(true);
+}
+
+void ElectronLowLevel::onDisconnected()
+{
+    emit connectionStatusChanged(false);
 }
 
 void ElectronLowLevel::runConnect()
@@ -106,9 +138,7 @@ void ElectronLowLevel::runConnect()
     timeStamp = 0;
     deviceCheckCounter = 0;
 
-    QMetaObject::invokeMethod(this, [this]() {
-        emit connectionStatusChanged(true);
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, "onConnected", Qt::QueuedConnection);
 
     while (!shouldStop && isConnected)
     {
@@ -150,9 +180,7 @@ void ElectronLowLevel::runConnect()
 
     if (!shouldStop)
     {
-        QMetaObject::invokeMethod(this, [this]() {
-            emit connectionStatusChanged(false);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, "onDisconnected", Qt::QueuedConnection);
     }
 }
 
@@ -321,7 +349,7 @@ void ElectronLowLevel::SetExtraData(uint8_t* data, uint32_t len)
 
 uint8_t* ElectronLowLevel::GetExtraData(uint8_t* data)
 {
-    if (data != nullptr)
+    if (data != 0)
     {
         memcpy(data, extraDataBufferRx, kExtraDataSize);
     }
@@ -338,7 +366,7 @@ void ElectronLowLevel::SetJointAngles(float j1, float j2, float j3, float j4, fl
 
     for (int j = 0; j < kJointCount; j++)
     {
-        auto* bytes = reinterpret_cast<unsigned char*>(&jointAngleSetPoints[j]);
+        unsigned char* bytes = reinterpret_cast<unsigned char*>(&jointAngleSetPoints[j]);
         for (int i = 0; i < 4; i++)
         {
             extraDataBufferTx[pingPongWriteIndex][j * 4 + i + 1] = bytes[i];

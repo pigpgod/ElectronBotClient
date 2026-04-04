@@ -1,3 +1,15 @@
+/**
+ * @file ffmpegvideoplayer.cpp
+ * @brief FFmpeg 视频播放器类实现
+ * 
+ * 实现视频播放功能：
+ * - 视频文件加载和解析
+ * - FFmpeg 解码器初始化
+ * - 帧解码和图像格式转换
+ * - 定时器驱动的帧解码
+ * - Qt 资源文件支持（临时文件方式）
+ */
+
 #include "ffmpegvideoplayer.h"
 #include <QDebug>
 #include <QFile>
@@ -11,17 +23,17 @@ extern "C" {
 
 FFmpegVideoPlayer::FFmpegVideoPlayer(QWidget *parent)
     : QWidget(parent)
-    , m_displayLabel(nullptr)
-    , m_timer(nullptr)
-    , m_formatContext(nullptr)
-    , m_videoCodecContext(nullptr)
-    , m_audioCodecContext(nullptr)
-    , m_frame(nullptr)
-    , m_rgbFrame(nullptr)
-    , m_swsContext(nullptr)
+    , m_displayLabel(0)
+    , m_timer(0)
+    , m_formatContext(0)
+    , m_videoCodecContext(0)
+    , m_audioCodecContext(0)
+    , m_frame(0)
+    , m_rgbFrame(0)
+    , m_swsContext(0)
     , m_videoStreamIndex(-1)
     , m_audioStreamIndex(-1)
-    , m_packet(nullptr)
+    , m_packet(0)
     , m_state(StoppedState)
     , m_duration(0)
     , m_currentPosition(0)
@@ -29,12 +41,12 @@ FFmpegVideoPlayer::FFmpegVideoPlayer(QWidget *parent)
     , m_frameRate(25)
     , m_quit(false)
     , m_loop(false)
-    , m_buffer(nullptr)
+    , m_buffer(0)
     , m_tempFilePath()
 {
     m_timer = new QTimer(this);
     m_timer->setSingleShot(false);
-    connect(m_timer, &QTimer::timeout, this, &FFmpegVideoPlayer::decodeFrame);
+    connect(m_timer, SIGNAL(timeout()), this, SLOT(decodeFrame()));
 }
 
 FFmpegVideoPlayer::~FFmpegVideoPlayer()
@@ -91,12 +103,12 @@ bool FFmpegVideoPlayer::loadVideo(const QString &filePath)
     }
 
     QByteArray pathBytes = actualPath.toUtf8();
-    if (avformat_open_input(&m_formatContext, pathBytes.constData(), nullptr, nullptr) != 0) {
+    if (avformat_open_input(&m_formatContext, pathBytes.constData(), 0, 0) != 0) {
         qDebug() << "Failed to open input file:" << actualPath;
         return false;
     }
 
-    if (avformat_find_stream_info(m_formatContext, nullptr) < 0) {
+    if (avformat_find_stream_info(m_formatContext, 0) < 0) {
         qDebug() << "Failed to find stream info";
         return false;
     }
@@ -136,7 +148,7 @@ bool FFmpegVideoPlayer::loadVideo(const QString &filePath)
         return false;
     }
 
-    if (avcodec_open2(m_videoCodecContext, videoCodec, nullptr) < 0) {
+    if (avcodec_open2(m_videoCodecContext, videoCodec, 0) < 0) {
         qDebug() << "Failed to open video codec";
         return false;
     }
@@ -148,7 +160,7 @@ bool FFmpegVideoPlayer::loadVideo(const QString &filePath)
             m_audioCodecContext = avcodec_alloc_context3(audioCodec);
             if (m_audioCodecContext) {
                 if (avcodec_parameters_to_context(m_audioCodecContext, audioStream->codecpar) >= 0) {
-                    avcodec_open2(m_audioCodecContext, audioCodec, nullptr);
+                    avcodec_open2(m_audioCodecContext, audioCodec, 0);
                 }
             }
         }
@@ -181,7 +193,7 @@ bool FFmpegVideoPlayer::loadVideo(const QString &filePath)
                                   m_videoCodecContext->height,
                                   AV_PIX_FMT_RGB24,
                                   SWS_BILINEAR,
-                                  nullptr, nullptr, nullptr);
+                                  0, 0, 0);
 
     m_duration = m_formatContext->duration / 1000;
     emit durationChanged(m_duration);
@@ -353,45 +365,45 @@ void FFmpegVideoPlayer::closeDecoder()
 {
     if (m_swsContext) {
         sws_freeContext(m_swsContext);
-        m_swsContext = nullptr;
+        m_swsContext = 0;
     }
 
     if (m_buffer) {
         av_free(m_buffer);
-        m_buffer = nullptr;
+        m_buffer = 0;
     }
 
     if (m_frame) {
         av_frame_free(&m_frame);
-        m_frame = nullptr;
+        m_frame = 0;
     }
 
     if (m_rgbFrame) {
         av_frame_free(&m_rgbFrame);
-        m_rgbFrame = nullptr;
+        m_rgbFrame = 0;
     }
 
     if (m_videoCodecContext) {
         avcodec_close(m_videoCodecContext);
         avcodec_free_context(&m_videoCodecContext);
-        m_videoCodecContext = nullptr;
+        m_videoCodecContext = 0;
     }
 
     if (m_audioCodecContext) {
         avcodec_close(m_audioCodecContext);
         avcodec_free_context(&m_audioCodecContext);
-        m_audioCodecContext = nullptr;
+        m_audioCodecContext = 0;
     }
 
     if (m_formatContext) {
         avformat_close_input(&m_formatContext);
         avformat_free_context(m_formatContext);
-        m_formatContext = nullptr;
+        m_formatContext = 0;
     }
 
     if (m_packet) {
         av_packet_free(&m_packet);
-        m_packet = nullptr;
+        m_packet = 0;
     }
 
     m_videoStreamIndex = -1;

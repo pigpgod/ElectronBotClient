@@ -1,3 +1,17 @@
+/**
+ * @file mainwindow.cpp
+ * @brief 主窗口类实现
+ * 
+ * 实现应用程序的主界面功能：
+ * - 自定义标题栏的拖拽和窗口控制
+ * - 发光按钮的绘制和动画效果
+ * - 状态指示灯的显示和闪烁
+ * - 等待对话框的动画效果
+ * - 视频播放控制
+ * - USB 设备连接管理
+ * - 屏幕捕获和传输
+ */
+
 #include "mainwindow.h"
 #include <QFileInfo>
 #include <QPainterPath>
@@ -32,21 +46,21 @@ CustomTitleBar::CustomTitleBar(QWidget *parent)
     layout->addLayout(titleLayout);
     layout->addStretch();
 
-    QString btnStyle = R"(
-        QPushButton {
-            background: transparent;
-            border: none;
-            color: rgba(255,255,255,0.6);
-            font-size: 20px;
-            font-family: 'Segoe UI', Arial;
-            padding: 10px 18px;
-            border-radius: 6px;
-        }
-        QPushButton:hover {
-            color: #fff;
-            background: rgba(230,57,70,0.15);
-        }
-    )";
+    QString btnStyle = QString(
+        "QPushButton {"
+        "    background: transparent;"
+        "    border: none;"
+        "    color: rgba(255,255,255,0.6);"
+        "    font-size: 20px;"
+        "    font-family: 'Segoe UI', Arial;"
+        "    padding: 10px 18px;"
+        "    border-radius: 6px;"
+        "}"
+        "QPushButton:hover {"
+        "    color: #fff;"
+        "    background: rgba(230,57,70,0.15);"
+        "}"
+    );
 
     btnMinimize = new QPushButton("-", this);
     btnMinimize->setStyleSheet(btnStyle);
@@ -57,12 +71,12 @@ CustomTitleBar::CustomTitleBar(QWidget *parent)
     btnMaximize->setFixedSize(50, 40);
 
     btnClose = new QPushButton("x");
-    QString closeStyle = btnStyle + R"(
-        QPushButton:hover {
-            color: #fff;
-            background: #E63946;
-        }
-    )";
+    QString closeStyle = btnStyle + QString(
+        "QPushButton:hover {"
+        "    color: #fff;"
+        "    background: #E63946;"
+        "}"
+    );
     btnClose->setStyleSheet(closeStyle);
     btnClose->setFixedSize(50, 40);
 
@@ -70,9 +84,9 @@ CustomTitleBar::CustomTitleBar(QWidget *parent)
     layout->addWidget(btnMaximize);
     layout->addWidget(btnClose);
 
-    connect(btnMinimize, &QPushButton::clicked, this, &CustomTitleBar::onMinimizeClicked);
-    connect(btnMaximize, &QPushButton::clicked, this, &CustomTitleBar::onMaximizeClicked);
-    connect(btnClose, &QPushButton::clicked, this, &CustomTitleBar::onCloseClicked);
+    connect(btnMinimize, SIGNAL(clicked()), this, SLOT(onMinimizeClicked()));
+    connect(btnMaximize, SIGNAL(clicked()), this, SLOT(onMaximizeClicked()));
+    connect(btnClose, SIGNAL(clicked()), this, SLOT(onCloseClicked()));
 }
 
 void CustomTitleBar::setTitle(const QString &title)
@@ -130,10 +144,13 @@ GlowingButton::GlowingButton(const QString &text, QWidget *parent)
     setStyleSheet("background: transparent; border: none;");
 
     animationTimer = new QTimer(this);
-    connect(animationTimer, &QTimer::timeout, [this]() {
-        animValue = (animValue + 1) % 360;
-        update();
-    });
+    connect(animationTimer, SIGNAL(timeout()), this, SLOT(onAnimationTimeout()));
+}
+
+void GlowingButton::onAnimationTimeout()
+{
+    animValue = (animValue + 1) % 360;
+    update();
 }
 
 void GlowingButton::enterEvent(QEvent *)
@@ -149,9 +166,8 @@ void GlowingButton::leaveEvent(QEvent *)
     update();
 }
 
-void GlowingButton::paintEvent(QPaintEvent *event)
+void GlowingButton::paintEvent(QPaintEvent *)
 {
-    Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
@@ -210,11 +226,14 @@ StatusIndicator::StatusIndicator(QWidget *parent)
     setFixedSize(28, 28);
 
     blinkTimer = new QTimer(this);
-    connect(blinkTimer, &QTimer::timeout, [this]() {
-        showOn = !showOn;
-        animValue = (animValue + 10) % 360;
-        update();
-    });
+    connect(blinkTimer, SIGNAL(timeout()), this, SLOT(onBlinkTimeout()));
+}
+
+void StatusIndicator::onBlinkTimeout()
+{
+    showOn = !showOn;
+    animValue = (animValue + 10) % 360;
+    update();
 }
 
 void StatusIndicator::setStatus(bool connected)
@@ -272,11 +291,14 @@ LoadingIndicator::LoadingIndicator(QWidget *parent)
 {
     setFixedSize(64, 64);
     m_timer = new QTimer(this);
-    connect(m_timer, &QTimer::timeout, [this]() {
-        m_rotation = (m_rotation + 30) % 360;
-        update();
-    });
+    connect(m_timer, SIGNAL(timeout()), this, SLOT(onRotationTimeout()));
     m_timer->start(80);
+}
+
+void LoadingIndicator::onRotationTimeout()
+{
+    m_rotation = (m_rotation + 30) % 360;
+    update();
 }
 
 void LoadingIndicator::setColor(const QColor &color)
@@ -298,7 +320,7 @@ void LoadingIndicator::paintEvent(QPaintEvent *)
     for (int i = 0; i < 10; i++) {
         double angle = qDegreesToRadians(double(m_rotation + i * 36));
         double alpha = 255.0 * (i + 1) / 10.0;
-        QColor dotColor = QColor(m_color.red(), m_color.green(), m_color.blue(), alpha);
+        QColor dotColor = QColor(m_color.red(), m_color.green(), m_color.blue(), int(alpha));
         painter.setBrush(QBrush(dotColor));
         double dotX = center.x() + radius * qCos(angle) - 5;
         double dotY = center.y() + radius * qSin(angle) - 5;
@@ -318,9 +340,9 @@ WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidg
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    QWidget *container = new QWidget(this);
-    container->setObjectName("container");
-    QVBoxLayout *containerLayout = new QVBoxLayout(container);
+    containerWidget = new QWidget(this);
+    containerWidget->setObjectName("container");
+    QVBoxLayout *containerLayout = new QVBoxLayout(containerWidget);
     containerLayout->setContentsMargins(30, 32, 30, 28);
     containerLayout->setSpacing(18);
     containerLayout->setAlignment(Qt::AlignCenter);
@@ -347,52 +369,58 @@ WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidg
     containerLayout->addWidget(messageLabel);
     containerLayout->addWidget(statusLabel, 0, Qt::AlignCenter);
 
-    mainLayout->addWidget(container);
+    mainLayout->addWidget(containerWidget);
 
     animationTimer = new QTimer(this);
-    connect(animationTimer, &QTimer::timeout, [this, container]() {
-        animValue = (animValue + 2) % 360;
-
-        int pulseR = 230 + (animValue % 25);
-        int pulseG = 57 + (animValue % 15);
-        QString color = QString("rgb(%1,%2,%3)").arg(pulseR).arg(pulseG).arg(70);
-        container->setStyleSheet(QString(R"(
-            #container {
-                %1
-                border: 2px solid %2;
-                border-radius: 14px;
-            }
-            #titleLabel {
-                color: %3;
-                font-size: 18px;
-            }
-            #messageLabel {
-                color: %4;
-                font-size: 14px;
-            }
-            #statusLabel {
-                color: %5;
-                font-size: 12px;
-            }
-        )").arg(AppStyle::dialogBackground())
-           .arg(color)
-           .arg(AppStyle::primaryColor)
-           .arg(AppStyle::whiteColor)
-           .arg(AppStyle::textSecondaryColor));
-    });
+    connect(animationTimer, SIGNAL(timeout()), this, SLOT(onAnimationTimeout()));
     animationTimer->start(30);
 
     scanLineTimer = new QTimer(this);
-    connect(scanLineTimer, &QTimer::timeout, [this]() {
-        update();
-    });
+    connect(scanLineTimer, SIGNAL(timeout()), this, SLOT(onScanLineTimeout()));
     scanLineTimer->start(50);
 
-    setStyleSheet(R"(
-        QDialog {
-            background: transparent;
-        }
-    )");
+    setStyleSheet(QString(
+        "QDialog {"
+        "    background: transparent;"
+        "}"
+    ));
+}
+
+void WaitingDialog::onAnimationTimeout()
+{
+    animValue = (animValue + 2) % 360;
+
+    int pulseR = 230 + (animValue % 25);
+    int pulseG = 57 + (animValue % 15);
+    QString color = QString("rgb(%1,%2,%3)").arg(pulseR).arg(pulseG).arg(70);
+    containerWidget->setStyleSheet(QString(
+        "#container {"
+        "    %1"
+        "    border: 2px solid %2;"
+        "    border-radius: 14px;"
+        "}"
+        "#titleLabel {"
+        "    color: %3;"
+        "    font-size: 18px;"
+        "}"
+        "#messageLabel {"
+        "    color: %4;"
+        "    font-size: 14px;"
+        "}"
+        "#statusLabel {"
+        "    color: %5;"
+        "    font-size: 12px;"
+        "}"
+    ).arg(AppStyle::dialogBackground())
+     .arg(color)
+     .arg(AppStyle::primaryColor)
+     .arg(AppStyle::whiteColor)
+     .arg(AppStyle::textSecondaryColor));
+}
+
+void WaitingDialog::onScanLineTimeout()
+{
+    update();
 }
 
 void WaitingDialog::setMessage(const QString &message)
@@ -487,7 +515,7 @@ void CustomMessageBox::setupUI(const QString &title, const QString &message, Ico
 
     QPushButton *okBtn = createButton("OK", QColor(230, 57, 70));
     btnLayout->addWidget(okBtn);
-    connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(okBtn, SIGNAL(clicked()), this, SLOT(accept()));
 
     containerLayout->addLayout(titleLayout);
     containerLayout->addWidget(msgLabel);
@@ -496,17 +524,17 @@ void CustomMessageBox::setupUI(const QString &title, const QString &message, Ico
 
     mainLayout->addWidget(container);
 
-    setStyleSheet(QString(R"(
-        QDialog {
-            background: transparent;
-        }
-        #msgContainer {
-            %1
-            border: 2px solid %2;
-            border-radius: 14px;
-        }
-    )").arg(AppStyle::dialogBackground())
-       .arg(AppStyle::primaryColorAlpha(0.5)));
+    setStyleSheet(QString(
+        "QDialog {"
+        "    background: transparent;"
+        "}"
+        "#msgContainer {"
+        "    %1"
+        "    border: 2px solid %2;"
+        "    border-radius: 14px;"
+        "}"
+    ).arg(AppStyle::dialogBackground())
+     .arg(AppStyle::primaryColorAlpha(0.5)));
 }
 
 QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &color)
@@ -514,21 +542,21 @@ QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &c
     QPushButton *btn = new QPushButton(text, this);
     btn->setFixedSize(110, 44);
     btn->setCursor(Qt::PointingHandCursor);
-    btn->setStyleSheet(QString(R"(
-        QPushButton {
-            background: rgba(%1, %2, %3, 0.15);
-            border: 2px solid rgba(%1, %2, %3, 0.7);
-            border-radius: 8px;
-            color: rgb(%1, %2, %3);
-            font-family: %4;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        QPushButton:hover {
-            background: rgba(%1, %2, %3, 0.3);
-            border-color: rgb(%1, %2, %3);
-        }
-    )").arg(color.red()).arg(color.green()).arg(color.blue()).arg(AppStyle::fontFamily));
+    btn->setStyleSheet(QString(
+        "QPushButton {"
+        "    background: rgba(%1, %2, %3, 0.15);"
+        "    border: 2px solid rgba(%1, %2, %3, 0.7);"
+        "    border-radius: 8px;"
+        "    color: rgb(%1, %2, %3);"
+        "    font-family: %4;"
+        "    font-size: 13px;"
+        "    font-weight: 700;"
+        "}"
+        "QPushButton:hover {"
+        "    background: rgba(%1, %2, %3, 0.3);"
+        "    border-color: rgb(%1, %2, %3);"
+        "}"
+    ).arg(color.red()).arg(color.green()).arg(color.blue()).arg(AppStyle::fontFamily));
     return btn;
 }
 
@@ -562,13 +590,13 @@ QMessageBox::StandardButton CustomMessageBox::question(QWidget *parent, const QS
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , videoPlayer(nullptr)
-    , videoDisplayLabel(nullptr)
+    , videoPlayer(0)
+    , videoDisplayLabel(0)
     , isCapturing(false)
     , captureInterval(50)
-    , robot(nullptr)
+    , robot(0)
     , isUsbConnected(false)
-    , waitingDialog(nullptr)
+    , waitingDialog(0)
     , isConnecting(false)
 {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
@@ -661,12 +689,12 @@ void MainWindow::setupUI()
     videoDisplayLabel = new QLabel(this);
     videoDisplayLabel->setMinimumSize(960, 560);
     videoDisplayLabel->setAlignment(Qt::AlignCenter);
-    videoDisplayLabel->setStyleSheet(QString(R"(
-        %1
-        border: 2px solid %2;
-        border-radius: 10px;
-    )").arg(AppStyle::videoDisplayBackground())
-       .arg(AppStyle::primaryColorAlpha(0.35)));
+    videoDisplayLabel->setStyleSheet(QString(
+        "%1"
+        "border: 2px solid %2;"
+        "border-radius: 10px;"
+    ).arg(AppStyle::videoDisplayBackground())
+     .arg(AppStyle::primaryColorAlpha(0.35)));
 
     QWidget *videoFooter = new QWidget(this);
     videoFooter->setObjectName("videoFooter");
@@ -792,74 +820,74 @@ void MainWindow::setupUI()
 
 void MainWindow::setupConnections()
 {
-    connect(btnOpen, &GlowingButton::clicked, this, &MainWindow::openFile);
-    connect(btnPlay, &GlowingButton::clicked, this, &MainWindow::playVideo);
-    connect(btnPause, &GlowingButton::clicked, this, &MainWindow::pauseVideo);
-    connect(btnStop, &GlowingButton::clicked, this, &MainWindow::stopVideo);
-    connect(btnConnect, &GlowingButton::clicked, this, &MainWindow::connectToBot);
-    connect(btnStartCapture, &GlowingButton::clicked, this, &MainWindow::startScreenCapture);
-    connect(btnStopCapture, &GlowingButton::clicked, this, &MainWindow::stopScreenCapture);
+    connect(btnOpen, SIGNAL(clicked()), this, SLOT(openFile()));
+    connect(btnPlay, SIGNAL(clicked()), this, SLOT(playVideo()));
+    connect(btnPause, SIGNAL(clicked()), this, SLOT(pauseVideo()));
+    connect(btnStop, SIGNAL(clicked()), this, SLOT(stopVideo()));
+    connect(btnConnect, SIGNAL(clicked()), this, SLOT(connectToBot()));
+    connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startScreenCapture()));
+    connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopScreenCapture()));
 
-    connect(captureTimer, &QTimer::timeout, this, &MainWindow::sendScreenData);
-    connect(videoPlayer, &FFmpegVideoPlayer::frameReady, this, &MainWindow::onFrameReady);
-    connect(robot, &ElectronLowLevel::connectionStatusChanged, this, &MainWindow::onConnectionStatusChanged);
-    connect(robot, &ElectronLowLevel::connectFinished, this, &MainWindow::onConnectFinished);
+    connect(captureTimer, SIGNAL(timeout()), this, SLOT(sendScreenData()));
+    connect(videoPlayer, SIGNAL(frameReady(QImage)), this, SLOT(onFrameReady(QImage)));
+    connect(robot, SIGNAL(connectionStatusChanged(bool)), this, SLOT(onConnectionStatusChanged(bool)));
+    connect(robot, SIGNAL(connectFinished(bool)), this, SLOT(onConnectFinished(bool)));
 }
 
 void MainWindow::applyStyleSheet()
 {
-    setStyleSheet(QString(R"(
-        QMainWindow {
-            background: transparent;
-        }
-        #mainContainer {
-            %1
-            border: 1px solid %2;
-            border-radius: 0px;
-        }
-        #videoContainer {
-            background: transparent;
-        }
-        #videoHeader {
-            %3
-            border: 1px solid %4;
-            border-radius: 10px 10px 0 0;
-        }
-        #videoFooter {
-            background: rgba(0, 0, 0, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 0 0 10px 10px;
-        }
-        #controlContainer {
-            background: transparent;
-        }
-        #controlHeader {
-            %3
-            border: 1px solid %4;
-            border-radius: 10px 10px 0 0;
-        }
-        #controlPanel {
-            %5
-            border: 1px solid %6;
-            border-top: none;
-            border-radius: 0 0 10px 10px;
-        }
-        #statusPanel {
-            %7
-            border: 1px solid %2;
-            border-radius: 10px;
-        }
-        QLabel {
-            color: %8;
-        }
-    )").arg(AppStyle::mainContainerBackground())
-       .arg(AppStyle::primaryColorAlpha(0.25))
-       .arg(AppStyle::headerGradient())
-       .arg(AppStyle::primaryColorAlpha(0.35))
-       .arg(AppStyle::controlPanelBackground())
-       .arg(AppStyle::primaryColorAlpha(0.2))
-       .arg(AppStyle::statusPanelBackground())
-       .arg(AppStyle::textPrimaryColor));
+    setStyleSheet(QString(
+        "QMainWindow {"
+        "    background: transparent;"
+        "}"
+        "#mainContainer {"
+        "    %1"
+        "    border: 1px solid %2;"
+        "    border-radius: 0px;"
+        "}"
+        "#videoContainer {"
+        "    background: transparent;"
+        "}"
+        "#videoHeader {"
+        "    %3"
+        "    border: 1px solid %4;"
+        "    border-radius: 10px 10px 0 0;"
+        "}"
+        "#videoFooter {"
+        "    background: rgba(0, 0, 0, 0.35);"
+        "    border: 1px solid rgba(255, 255, 255, 0.08);"
+        "    border-radius: 0 0 10px 10px;"
+        "}"
+        "#controlContainer {"
+        "    background: transparent;"
+        "}"
+        "#controlHeader {"
+        "    %3"
+        "    border: 1px solid %4;"
+        "    border-radius: 10px 10px 0 0;"
+        "}"
+        "#controlPanel {"
+        "    %5"
+        "    border: 1px solid %6;"
+        "    border-top: none;"
+        "    border-radius: 0 0 10px 10px;"
+        "}"
+        "#statusPanel {"
+        "    %7"
+        "    border: 1px solid %2;"
+        "    border-radius: 10px;"
+        "}"
+        "QLabel {"
+        "    color: %8;"
+        "}"
+    ).arg(AppStyle::mainContainerBackground())
+     .arg(AppStyle::primaryColorAlpha(0.25))
+     .arg(AppStyle::headerGradient())
+     .arg(AppStyle::primaryColorAlpha(0.35))
+     .arg(AppStyle::controlPanelBackground())
+     .arg(AppStyle::primaryColorAlpha(0.2))
+     .arg(AppStyle::statusPanelBackground())
+     .arg(AppStyle::textPrimaryColor));
 }
 
 void MainWindow::showWaitingDialog(const QString &title, const QString &message)
@@ -963,10 +991,13 @@ void MainWindow::disconnectFromBot()
     showWaitingDialog("DISCONNECTING", "Closing USB connection...");
     btnConnect->setEnabled(false);
 
-    QTimer::singleShot(100, this, [this]() {
-        robot->Disconnect();
-        hideWaitingDialog();
-    });
+    QTimer::singleShot(100, this, SLOT(onDisconnectTimeout()));
+}
+
+void MainWindow::onDisconnectTimeout()
+{
+    robot->Disconnect();
+    hideWaitingDialog();
 }
 
 void MainWindow::onConnectionStatusChanged(bool connected)
