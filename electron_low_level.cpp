@@ -1,18 +1,20 @@
 #include "electron_low_level.h"
-#include "USBInterface.h"
-#include <QDebug>
+#include "libusb_wrapper.h"
 
 ElectronLowLevel::ElectronLowLevel(QObject *parent)
     : QObject(parent)
     , workerThread(nullptr)
+    , usb(new LibUsbWrapper())
     , shouldStop(false)
     , isTransmitting(false)
 {
+    usb->init();
 }
 
 ElectronLowLevel::~ElectronLowLevel()
 {
     Disconnect();
+    delete usb;
 }
 
 void ElectronLowLevel::stopWorkerThread()
@@ -20,46 +22,47 @@ void ElectronLowLevel::stopWorkerThread()
     if (workerThread == nullptr) return;
 
     shouldStop = true;
-    
+
     if (workerThread->isRunning())
     {
         workerThread->quit();
         workerThread->wait(kThreadWaitMs);
     }
-    
+
     if (workerThread->isRunning())
     {
         workerThread->terminate();
         workerThread->wait();
     }
-    
+
     delete workerThread;
     workerThread = nullptr;
 }
 
 bool ElectronLowLevel::Connect()
 {
-    if (isConnected)
-    {
-        Disconnect();
-    }
-
     stopWorkerThread();
 
-    int devNum = USB_ScanDevice(USB_PID, USB_VID);
-    if (devNum <= 0)
+    usb->closeDevice(0);
+
+    if (isConnected)
     {
         isConnected = false;
-        return false;
+        emit connectionStatusChanged(false);
     }
 
     shouldStop = false;
+    connectSuccess = false;
+
     workerThread = QThread::create([this]() {
         runConnect();
     });
 
     connect(workerThread, &QThread::finished, this, [this]() {
-        isConnected = false;
+        if (!connectSuccess)
+        {
+            isConnected = false;
+        }
     });
 
     workerThread->start();
@@ -68,9 +71,13 @@ bool ElectronLowLevel::Connect()
     for (int i = 0; i < maxAttempts; i++)
     {
         QThread::msleep(kConnectPollIntervalMs);
-        if (isConnected)
+        if (connectSuccess)
         {
             return true;
+        }
+        if (!workerThread->isRunning())
+        {
+            break;
         }
     }
 
@@ -80,65 +87,72 @@ bool ElectronLowLevel::Connect()
 
 void ElectronLowLevel::runConnect()
 {
-    int devNum = USB_ScanDevice(USB_PID, USB_VID);
+    int devNum = usb->scanDevice(USB_VID, USB_PID);
 
-    if (devNum > 0 && USB_OpenDevice(0))
+    if (devNum <= 0)
     {
-        isConnected = true;
-        timeStamp = 0;
-        deviceCheckCounter = 0;
+        return;
+    }
 
-        QMetaObject::invokeMethod(this, [this]() {
-            emit connectionStatusChanged(true);
-        }, Qt::QueuedConnection);
+    if (!usb->openDevice(0, USB_VID, USB_PID))
+    {
+        return;
+    }
 
-        while (!shouldStop && isConnected)
+    usb->claimInterface(0, 0);
+
+    isConnected = true;
+    connectSuccess = true;
+    timeStamp = 0;
+    deviceCheckCounter = 0;
+
+    QMetaObject::invokeMethod(this, [this]() {
+        emit connectionStatusChanged(true);
+    }, Qt::QueuedConnection);
+
+    while (!shouldStop && isConnected)
+    {
+        deviceCheckCounter++;
+        if (deviceCheckCounter >= kDeviceCheckLoopCount)
         {
-            deviceCheckCounter++;
-            if (deviceCheckCounter >= kDeviceCheckLoopCount)
+            deviceCheckCounter = 0;
+            if (!usb->isDeviceConnected(0))
             {
-                deviceCheckCounter = 0;
-                bool checkResult = USB_CheckDevice(0);
-                qDebug() << "USB_CheckDevice result:" << checkResult;
-                if (!checkResult)
+                isConnected = false;
+                break;
+            }
+        }
+
+        QMutexLocker locker(&dataMutex);
+        if (newFrameAvailable)
+        {
+            if (!isTransmitting)
+            {
+                newFrameAvailable = false;
+                locker.unlock();
+                if (!runSync())
                 {
-                    qDebug() << "Device disconnected detected!";
                     isConnected = false;
                     break;
                 }
             }
-
-            QMutexLocker locker(&dataMutex);
-            if (newFrameAvailable)
+            else
             {
-                if (!isTransmitting)
-                {
-                    newFrameAvailable = false;
-                    locker.unlock();
-                    if (!runSync())
-                    {
-                        isConnected = false;
-                        break;
-                    }
-                }
-                else
-                {
-                    newFrameAvailable = false;
-                    locker.unlock();
-                }
+                newFrameAvailable = false;
+                locker.unlock();
             }
-            QThread::msleep(1);
         }
+        QThread::msleep(1);
+    }
 
-        USB_CloseDevice(0);
-        qDebug() << "USB device closed";
+    usb->releaseInterface(0, 0);
+    usb->closeDevice(0);
 
-        if (!shouldStop)
-        {
-            QMetaObject::invokeMethod(this, [this]() {
-                emit connectionStatusChanged(false);
-            }, Qt::QueuedConnection);
-        }
+    if (!shouldStop)
+    {
+        QMetaObject::invokeMethod(this, [this]() {
+            emit connectionStatusChanged(false);
+        }, Qt::QueuedConnection);
     }
 }
 
@@ -148,7 +162,7 @@ bool ElectronLowLevel::Disconnect()
 
     if (isConnected)
     {
-        USB_CloseDevice(0);
+        usb->closeDevice(0);
         isConnected = false;
     }
 
@@ -172,7 +186,7 @@ bool ElectronLowLevel::processImageFrame()
         return true;
     }
 
-    QImage scaled = pendingImage.scaled(kImageSize, kImageSize, 
+    QImage scaled = pendingImage.scaled(kImageSize, kImageSize,
                                         Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     QImage rgb = scaled.convertToFormat(QImage::Format_RGB888);
 
@@ -184,7 +198,7 @@ bool ElectronLowLevel::processImageFrame()
     {
         const uint8_t* srcRow = src + y * srcStride;
         uint8_t* dstRow = dst + y * kImageSize * 3;
-        
+
         for (int x = 0; x < kImageSize; x++)
         {
             dstRow[x * 3] = srcRow[x * 3];
@@ -202,24 +216,24 @@ bool ElectronLowLevel::transmitFrameData(int pingPongIndex)
 
     for (int p = 0; p < kTransferPhases; p++)
     {
-        if (!receivePacket(reinterpret_cast<uint8_t*>(extraDataBufferRx), 
+        if (!receivePacket(reinterpret_cast<uint8_t*>(extraDataBufferRx),
                           kPacketCount1, kExtraDataSize))
         {
             return false;
         }
 
-        if (!transmitPacket(reinterpret_cast<uint8_t*>(frameBufferTx[pingPongIndex]) + frameBufferOffset, 
+        if (!transmitPacket(reinterpret_cast<uint8_t*>(frameBufferTx[pingPongIndex]) + frameBufferOffset,
                            kPacketCount84, kPacketSize512))
         {
             return false;
         }
         frameBufferOffset += kFrameChunkSize;
 
-        memcpy(usbBuffer200, 
-               reinterpret_cast<uint8_t*>(frameBufferTx[pingPongIndex]) + frameBufferOffset, 
+        memcpy(usbBuffer200,
+               reinterpret_cast<uint8_t*>(frameBufferTx[pingPongIndex]) + frameBufferOffset,
                kFrameTailSize);
-        memcpy(usbBuffer200 + kFrameTailSize, 
-               reinterpret_cast<uint8_t*>(extraDataBufferTx[pingPongIndex]), 
+        memcpy(usbBuffer200 + kFrameTailSize,
+               reinterpret_cast<uint8_t*>(extraDataBufferTx[pingPongIndex]),
                kExtraDataSize);
 
         if (!transmitPacket(usbBuffer200, kPacketCount1, kPacketSize224))
@@ -260,14 +274,12 @@ bool ElectronLowLevel::receivePacket(uint8_t* buffer, uint32_t packetCount, uint
 {
     uint32_t remaining = packetCount;
     int ret;
-    
+
     do
     {
-        ret = USB_BulkReceive(0, kEp1In, reinterpret_cast<char*>(buffer), 
-                              packetSize, kUsbTimeoutMs);
+        ret = usb->bulkRead(0, kEp1In, buffer, packetSize, kUsbTimeoutMs);
         if (ret <= 0)
         {
-            qDebug() << "receivePacket failed, ret:" << ret;
             return false;
         }
         if (ret == (int)packetSize)
@@ -284,15 +296,12 @@ bool ElectronLowLevel::transmitPacket(uint8_t* buffer, uint32_t packetCount, uin
     uint32_t remaining = packetCount;
     uint32_t dataOffset = 0;
     int ret;
-    
+
     do
     {
-        ret = USB_BulkTransmit(0, kEp1Out,
-                               reinterpret_cast<char*>(buffer) + dataOffset,
-                               packetSize, kUsbTimeoutMs);
+        ret = usb->bulkWrite(0, kEp1Out, buffer + dataOffset, packetSize, kUsbTimeoutMs);
         if (ret <= 0)
         {
-            qDebug() << "transmitPacket failed, ret:" << ret;
             return false;
         }
         dataOffset += packetSize;
@@ -326,7 +335,7 @@ void ElectronLowLevel::SetJointAngles(float j1, float j2, float j3, float j4, fl
     float jointAngleSetPoints[kJointCount] = {j1, j2, j3, j4, j5, j6};
 
     extraDataBufferTx[pingPongWriteIndex][0] = enable ? 1 : 0;
-    
+
     for (int j = 0; j < kJointCount; j++)
     {
         auto* bytes = reinterpret_cast<unsigned char*>(&jointAngleSetPoints[j]);

@@ -7,6 +7,8 @@
 #include <QImage>
 #include <cstdint>
 
+class LibUsbWrapper;
+
 class ElectronLowLevel : public QObject
 {
     Q_OBJECT
@@ -65,7 +67,9 @@ private:
 
     QThread *workerThread;
     QMutex dataMutex;
+    LibUsbWrapper* usb;
     int deviceCheckCounter = 0;
+    bool connectSuccess = false;
     bool newFrameAvailable = false;
     bool shouldStop = false;
     bool isTransmitting = false;
