@@ -6,34 +6,42 @@
  * - 颜色常量定义
  * - 带透明度的颜色生成
  * - CSS 样式字符串生成
- * - 渐变背景样式
+ * - 机器人控制软件深色主题样式
  */
 
 #include "appstyle.h"
 
-const QString AppStyle::primaryColor = "#E63946";
-const QString AppStyle::successColor = "#4CAF50";
-const QString AppStyle::warningColor = "#FF9800";
-const QString AppStyle::whiteColor = "#ffffff";
-const QString AppStyle::textPrimaryColor = "#e8e8e8";
-const QString AppStyle::textSecondaryColor = "rgba(255,255,255,0.5)";
+const QString AppStyle::primaryColor = "#00D4FF";
+const QString AppStyle::primaryColorLight = "#5CE1FF";
+const QString AppStyle::accentColor = "#00FF88";
+const QString AppStyle::successColor = "#00FF88";
+const QString AppStyle::warningColor = "#FFB800";
+const QString AppStyle::errorColor = "#FF3366";
+const QString AppStyle::bgDark = "#0A0E14";
+const QString AppStyle::bgPanel = "#111820";
+const QString AppStyle::bgCard = "#1A2332";
+const QString AppStyle::borderColor = "#2A3A4A";
+const QString AppStyle::borderColorLight = "#3A4A5A";
+const QString AppStyle::textPrimaryColor = "#E8F4FF";
+const QString AppStyle::textSecondaryColor = "#8BA4B8";
+const QString AppStyle::textMutedColor = "#5A7088";
 
 QString AppStyle::primaryColorAlpha(double alpha)
 {
-    return QString("rgba(230, 57, 70, %1)").arg(alpha);
+    return QString("rgba(0, 212, 255, %1)").arg(alpha);
+}
+
+QString AppStyle::accentColorAlpha(double alpha)
+{
+    return QString("rgba(0, 255, 136, %1)").arg(alpha);
 }
 
 QString AppStyle::successColorAlpha(double alpha)
 {
-    return QString("rgba(76, 175, 80, %1)").arg(alpha);
+    return QString("rgba(0, 255, 136, %1)").arg(alpha);
 }
 
-QString AppStyle::whiteColorAlpha(double alpha)
-{
-    return QString("rgba(255, 255, 255, %1)").arg(alpha);
-}
-
-const QString AppStyle::fontFamily = "'Segoe UI', Arial";
+const QString AppStyle::fontFamily = "Microsoft YaHei";
 
 QString AppStyle::font(int size, int weight)
 {
@@ -43,33 +51,27 @@ QString AppStyle::font(int size, int weight)
 
 QString AppStyle::dialogBackground()
 {
-    return "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #16161a, stop:1 #111114);";
+    return "background: #111820; border: 1px solid #2A3A4A;";
 }
 
 QString AppStyle::mainContainerBackground()
 {
-    return "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #121214, stop:0.3 #151518, stop:0.7 #131315, stop:1 #0e0e10);";
+    return "background: #0A0E14;";
 }
 
-QString AppStyle::headerGradient()
+QString AppStyle::panelBackground()
 {
-    return QString("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %1, stop:1 %2);")
-        .arg(primaryColorAlpha(0.18)).arg(primaryColorAlpha(0.06));
+    return "background: #111820; border: 1px solid #2A3A4A;";
+}
+
+QString AppStyle::cardBackground()
+{
+    return "background: #1A2332; border: 1px solid #2A3A4A;";
 }
 
 QString AppStyle::videoDisplayBackground()
 {
-    return "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d0d0d, stop:0.5 #101010, stop:1 #141414);";
-}
-
-QString AppStyle::controlPanelBackground()
-{
-    return "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(22, 22, 26, 0.95), stop:1 rgba(16, 16, 19, 0.95));";
-}
-
-QString AppStyle::statusPanelBackground()
-{
-    return "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(28, 28, 33, 0.95), stop:1 rgba(19, 19, 23, 0.95));";
+    return "background: #050810;";
 }
 
 QString AppStyle::labelStyle(const QString &color, int size, int weight)
@@ -79,32 +81,38 @@ QString AppStyle::labelStyle(const QString &color, int size, int weight)
 
 QString AppStyle::buttonStyle(const QString &color)
 {
-    return QString(R"(
-        QPushButton {
-            background: rgba(%1, 0.15);
-            border: 2px solid rgba(%1, 0.7);
-            border-radius: 8px;
-            color: rgb(%1);
-            font-family: %2;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        QPushButton:hover {
-            background: rgba(%1, 0.3);
-            border-color: rgb(%1);
-        }
-    )").arg(color).arg(fontFamily);
+    return QString(
+        "QPushButton {"
+        "    background: transparent;"
+        "    border: 1px solid %1;"
+        "    border-radius: 4px;"
+        "    color: %1;"
+        "    font-family: %2;"
+        "    font-size: 12px;"
+        "    font-weight: 500;"
+        "    padding: 8px 16px;"
+        "}"
+        "QPushButton:hover {"
+        "    background: %1;"
+        "    color: #0A0E14;"
+        "}"
+        "QPushButton:disabled {"
+        "    border-color: #3A4A5A;"
+        "    color: #5A7088;"
+        "}"
+    ).arg(color).arg(fontFamily);
 }
 
-QString AppStyle::statusBadgeStyle(const QString &color, const QString &bgColor)
+QString AppStyle::statusBadgeStyle(const QString &color, const QString &bgColor, int size)
 {
-    return QString(R"(
-        color: %1;
-        font-family: %2;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 4px 12px;
-        background: %3;
-        border-radius: 4px;
-    )").arg(color).arg(fontFamily).arg(bgColor);
+    return QString(
+        "color: %1;"
+        "font-family: %2;"
+        "font-size: %4px;"
+        "font-weight: 600;"
+        "padding: 3px 10px;"
+        "background: %3;"
+        "border: 1px solid %1;"
+        "border-radius: 3px;"
+    ).arg(color).arg(fontFamily).arg(bgColor).arg(size);
 }

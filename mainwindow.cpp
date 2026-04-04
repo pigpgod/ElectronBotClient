@@ -4,16 +4,14 @@
  * 
  * 实现应用程序的主界面功能：
  * - 自定义标题栏的拖拽和窗口控制
- * - 发光按钮的绘制和动画效果
+ * - 科技风格按钮样式
  * - 状态指示灯的显示和闪烁
  * - 等待对话框的动画效果
- * - 视频播放控制
+ * - 视频播放和摄像头捕获切换
  * - USB 设备连接管理
- * - 屏幕捕获和传输
  */
 
 #include "mainwindow.h"
-#include <QFileInfo>
 #include <QPainterPath>
 #include <QtMath>
 
@@ -21,64 +19,59 @@ CustomTitleBar::CustomTitleBar(QWidget *parent)
     : QWidget(parent)
     , parentWindow(parent)
 {
-    setFixedHeight(56);
-    setStyleSheet("background: transparent;");
+    setFixedHeight(40);
+    setStyleSheet("background: #111820; border-bottom: 1px solid #2A3A4A;");
 
     QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(24, 0, 16, 0);
-    layout->setSpacing(12);
+    layout->setContentsMargins(12, 0, 8, 0);
+    layout->setSpacing(8);
 
-    QLabel *iconLabel = new QLabel("EB", this);
-    iconLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 22, 900));
+    QLabel *iconLabel = new QLabel("⚡", this);
+    iconLabel->setStyleSheet("color: #00D4FF; font-size: 20px;");
 
-    titleLabel = new QLabel("ELECTRONBOT", this);
-    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 18, 700));
+    titleLabel = new QLabel("ELECTRONBOT CONTROLLER", this);
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textPrimaryColor, 14, 600));
 
-    QLabel *subtitleLabel = new QLabel("v3.0", this);
-    subtitleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 11, 600));
-
-    QVBoxLayout *titleLayout = new QVBoxLayout();
-    titleLayout->setSpacing(1);
-    titleLayout->addWidget(titleLabel);
-    titleLayout->addWidget(subtitleLabel);
+    QLabel *versionLabel = new QLabel("v3.0", this);
+    versionLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 400));
 
     layout->addWidget(iconLabel);
-    layout->addLayout(titleLayout);
+    layout->addSpacing(4);
+    layout->addWidget(titleLabel);
+    layout->addSpacing(6);
+    layout->addWidget(versionLabel);
     layout->addStretch();
 
     QString btnStyle = QString(
         "QPushButton {"
         "    background: transparent;"
         "    border: none;"
-        "    color: rgba(255,255,255,0.6);"
-        "    font-size: 20px;"
-        "    font-family: 'Segoe UI', Arial;"
-        "    padding: 10px 18px;"
-        "    border-radius: 6px;"
+        "    color: %1;"
+        "    font-size: 14px;"
+        "    padding: 6px 10px;"
         "}"
         "QPushButton:hover {"
-        "    color: #fff;"
-        "    background: rgba(230,57,70,0.15);"
+        "    background: #1A2332;"
         "}"
-    );
+    ).arg(AppStyle::textSecondaryColor);
 
-    btnMinimize = new QPushButton("-", this);
+    btnMinimize = new QPushButton("─", this);
     btnMinimize->setStyleSheet(btnStyle);
-    btnMinimize->setFixedSize(50, 40);
+    btnMinimize->setFixedSize(36, 28);
 
-    btnMaximize = new QPushButton("+", this);
+    btnMaximize = new QPushButton("□", this);
     btnMaximize->setStyleSheet(btnStyle);
-    btnMaximize->setFixedSize(50, 40);
+    btnMaximize->setFixedSize(36, 28);
 
-    btnClose = new QPushButton("x");
+    btnClose = new QPushButton("✕");
     QString closeStyle = btnStyle + QString(
         "QPushButton:hover {"
-        "    color: #fff;"
-        "    background: #E63946;"
+        "    background: #FF3366;"
+        "    color: white;"
         "}"
     );
     btnClose->setStyleSheet(closeStyle);
-    btnClose->setFixedSize(50, 40);
+    btnClose->setFixedSize(36, 28);
 
     layout->addWidget(btnMinimize);
     layout->addWidget(btnMaximize);
@@ -121,10 +114,10 @@ void CustomTitleBar::onMaximizeClicked()
 {
     if (parentWindow->isMaximized()) {
         parentWindow->showNormal();
-        btnMaximize->setText("+");
+        btnMaximize->setText("□");
     } else {
         parentWindow->showMaximized();
-        btnMaximize->setText("=");
+        btnMaximize->setText("❐");
     }
 }
 
@@ -135,28 +128,27 @@ void CustomTitleBar::onCloseClicked()
 
 GlowingButton::GlowingButton(const QString &text, QWidget *parent)
     : QPushButton(text, parent)
-    , m_glowColor(230, 57, 70)
+    , m_glowColor(0, 212, 255)
     , isHovered(false)
     , animValue(0)
 {
     setCursor(Qt::PointingHandCursor);
-    setFixedHeight(48);
-    setStyleSheet("background: transparent; border: none;");
-
+    setFixedHeight(42);
+    setMinimumWidth(130);
     animationTimer = new QTimer(this);
     connect(animationTimer, SIGNAL(timeout()), this, SLOT(onAnimationTimeout()));
 }
 
 void GlowingButton::onAnimationTimeout()
 {
-    animValue = (animValue + 1) % 360;
+    animValue = (animValue + 3) % 360;
     update();
 }
 
 void GlowingButton::enterEvent(QEvent *)
 {
     isHovered = true;
-    animationTimer->start(16);
+    animationTimer->start(20);
 }
 
 void GlowingButton::leaveEvent(QEvent *)
@@ -172,42 +164,29 @@ void GlowingButton::paintEvent(QPaintEvent *)
     painter.setRenderHint(QPainter::Antialiasing);
 
     QRect rect = this->rect();
-    int radius = 8;
-
-    QColor glowColor = m_glowColor;
+    int radius = 4;
 
     if (isHovered) {
-        int pulse = int(25.0 * qSin(qDegreesToRadians(double(animValue * 3))));
-        glowColor = QColor(
-            qMin(255, m_glowColor.red() + pulse),
-            qMin(255, m_glowColor.green()),
-            qMin(255, m_glowColor.blue())
-        );
-
-        QPen glowPen(glowColor, 2);
-        painter.setPen(glowPen);
-        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), radius, radius);
-
-        QLinearGradient gradient(0, 0, 0, rect.height());
-        gradient.setColorAt(0, QColor(glowColor.red(), glowColor.green(), glowColor.blue(), 35));
-        gradient.setColorAt(0.5, QColor(glowColor.red(), glowColor.green(), glowColor.blue(), 15));
-        gradient.setColorAt(1, QColor(glowColor.red(), glowColor.green(), glowColor.blue(), 35));
-        painter.setBrush(gradient);
-        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), radius, radius);
+        QRadialGradient glow(QPointF(rect.center()), rect.width() * 0.8);
+        glow.setColorAt(0, QColor(m_glowColor.red(), m_glowColor.green(), m_glowColor.blue(), 60));
+        glow.setColorAt(1, QColor(m_glowColor.red(), m_glowColor.green(), m_glowColor.blue(), 0));
+        painter.setBrush(glow);
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(rect.adjusted(-4, -4, 4, 4), radius + 2, radius + 2);
     }
 
-    QPen borderPen(QColor(glowColor.red(), glowColor.green(), glowColor.blue(), isHovered ? 220 : 120), isHovered ? 2 : 1);
+    QPen borderPen(m_glowColor, 1);
     painter.setPen(borderPen);
-    painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), radius, radius);
 
     QFont font = this->font();
-    font.setFamily("Segoe UI");
+    font.setFamily(AppStyle::fontFamily);
     font.setBold(true);
     font.setPointSize(11);
-    font.setLetterSpacing(QFont::AbsoluteSpacing, 3);
     painter.setFont(font);
-    painter.setPen(isHovered ? glowColor : QColor(glowColor.red(), glowColor.green(), glowColor.blue(), 180));
-    painter.drawText(rect, Qt::AlignCenter, text().toUpper());
+    painter.setPen(m_glowColor);
+    painter.drawText(rect, Qt::AlignCenter, text());
 }
 
 void GlowingButton::setGlowColor(const QColor &color)
@@ -223,30 +202,28 @@ StatusIndicator::StatusIndicator(QWidget *parent)
     , showOn(true)
     , animValue(0)
 {
-    setFixedSize(28, 28);
+    setFixedSize(10, 10);
 
     blinkTimer = new QTimer(this);
     connect(blinkTimer, SIGNAL(timeout()), this, SLOT(onBlinkTimeout()));
 }
 
-void StatusIndicator::onBlinkTimeout()
-{
-    showOn = !showOn;
-    animValue = (animValue + 10) % 360;
-    update();
-}
-
 void StatusIndicator::setStatus(bool connected)
 {
     m_isConnected = connected;
-    m_ledColor = connected ? QColor(76, 175, 80) : QColor(230, 57, 70);
+    m_ledColor = connected ? QColor(0, 255, 136) : QColor(255, 51, 102);
     if (connected) {
-        blinkTimer->start(80);
+        blinkTimer->start(500);
     } else {
         blinkTimer->stop();
         showOn = true;
-        animValue = 0;
     }
+    update();
+}
+
+void StatusIndicator::onBlinkTimeout()
+{
+    showOn = !showOn;
     update();
 }
 
@@ -255,27 +232,23 @@ void StatusIndicator::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QRect rect = this->rect();
-    QPointF center(rect.width() / 2.0, rect.height() / 2.0);
-
-    QColor outerColor = m_ledColor;
-    if (!showOn) {
-        outerColor = QColor(m_ledColor.red(), m_ledColor.green(), m_ledColor.blue(), 50);
+    QColor color = m_ledColor;
+    if (!showOn && m_isConnected) {
+        color = color.darker(200);
     }
 
-    QRadialGradient gradient(center, rect.width() / 2.0);
-    gradient.setColorAt(0, QColor(255, 255, 255, 200));
-    gradient.setColorAt(0.3, outerColor);
-    gradient.setColorAt(1, QColor(outerColor.red(), outerColor.green(), outerColor.blue(), 80));
+    QRadialGradient gradient(rect().center(), 5);
+    gradient.setColorAt(0, color.lighter(150));
+    gradient.setColorAt(0.5, color);
+    gradient.setColorAt(1, color.darker(150));
 
     painter.setBrush(QBrush(gradient));
     painter.setPen(Qt::NoPen);
-    painter.drawEllipse(rect.adjusted(3, 3, -3, -3));
+    painter.drawEllipse(rect());
 
-    QPen ringPen(outerColor, 2);
-    painter.setPen(ringPen);
+    painter.setPen(QPen(color, 1));
     painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(rect.adjusted(4, 4, -4, -4));
+    painter.drawEllipse(rect().adjusted(-1, -1, 0, 0));
 }
 
 void StatusIndicator::setLedColor(const QColor &color)
@@ -286,13 +259,13 @@ void StatusIndicator::setLedColor(const QColor &color)
 
 LoadingIndicator::LoadingIndicator(QWidget *parent)
     : QWidget(parent)
-    , m_color(230, 57, 70)
+    , m_color(0, 212, 255)
     , m_rotation(0)
 {
-    setFixedSize(64, 64);
+    setFixedSize(40, 40);
     m_timer = new QTimer(this);
     connect(m_timer, SIGNAL(timeout()), this, SLOT(onRotationTimeout()));
-    m_timer->start(80);
+    m_timer->start(40);
 }
 
 void LoadingIndicator::onRotationTimeout()
@@ -312,20 +285,20 @@ void LoadingIndicator::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    QRect rect = this->rect();
-    QPointF center(rect.width() / 2.0, rect.height() / 2.0);
-    double radius = rect.width() / 2.0 - 8;
+    QPointF center(width() / 2.0, height() / 2.0);
+    double radius = width() / 2.0 - 4;
 
-    painter.setPen(Qt::NoPen);
-    for (int i = 0; i < 10; i++) {
-        double angle = qDegreesToRadians(double(m_rotation + i * 36));
-        double alpha = 255.0 * (i + 1) / 10.0;
-        QColor dotColor = QColor(m_color.red(), m_color.green(), m_color.blue(), int(alpha));
-        painter.setBrush(QBrush(dotColor));
-        double dotX = center.x() + radius * qCos(angle) - 5;
-        double dotY = center.y() + radius * qSin(angle) - 5;
-        painter.drawEllipse(QPointF(dotX + 5, dotY + 5), 5, 5);
-    }
+    painter.setPen(QPen(m_color, 3, Qt::SolidLine, Qt::RoundCap));
+    painter.setBrush(Qt::NoBrush);
+    
+    int spanAngle = 90 * 16;
+    int startAngle = (m_rotation - 90) * 16;
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2),
+                    startAngle, spanAngle);
+    
+    painter.setPen(QPen(QColor(m_color.red(), m_color.green(), m_color.blue(), 100), 3, Qt::SolidLine, Qt::RoundCap));
+    painter.drawArc(QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2),
+                    startAngle + spanAngle, 360 * 16 - spanAngle);
 }
 
 WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidget *parent)
@@ -334,88 +307,41 @@ WaitingDialog::WaitingDialog(const QString &title, const QString &message, QWidg
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setModal(true);
-    setFixedSize(420, 240);
-    setStyleSheet("background: transparent;");
+    setFixedSize(320, 160);
+    setStyleSheet("background: #111820; border: 1px solid #2A3A4A;");
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-
-    containerWidget = new QWidget(this);
-    containerWidget->setObjectName("container");
-    QVBoxLayout *containerLayout = new QVBoxLayout(containerWidget);
-    containerLayout->setContentsMargins(30, 32, 30, 28);
-    containerLayout->setSpacing(18);
-    containerLayout->setAlignment(Qt::AlignCenter);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(12);
+    mainLayout->setAlignment(Qt::AlignCenter);
 
     QLabel *titleLabel = new QLabel(title, this);
-    titleLabel->setObjectName("titleLabel");
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 18, 700));
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 600));
 
     loadingIndicator = new LoadingIndicator(this);
 
     messageLabel = new QLabel(message, this);
-    messageLabel->setObjectName("messageLabel");
     messageLabel->setAlignment(Qt::AlignCenter);
-    messageLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14));
+    messageLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 13, 400));
 
-    statusLabel = new QLabel("Please wait...", this);
-    statusLabel->setObjectName("statusLabel");
+    statusLabel = new QLabel("请稍候...", this);
     statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 12));
+    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 400));
 
-    containerLayout->addWidget(titleLabel);
-    containerLayout->addWidget(loadingIndicator, 0, Qt::AlignCenter);
-    containerLayout->addWidget(messageLabel);
-    containerLayout->addWidget(statusLabel, 0, Qt::AlignCenter);
-
-    mainLayout->addWidget(containerWidget);
+    mainLayout->addWidget(titleLabel);
+    mainLayout->addWidget(loadingIndicator, 0, Qt::AlignCenter);
+    mainLayout->addWidget(messageLabel);
+    mainLayout->addWidget(statusLabel, 0, Qt::AlignCenter);
 
     animationTimer = new QTimer(this);
     connect(animationTimer, SIGNAL(timeout()), this, SLOT(onAnimationTimeout()));
     animationTimer->start(30);
-
-    scanLineTimer = new QTimer(this);
-    connect(scanLineTimer, SIGNAL(timeout()), this, SLOT(onScanLineTimeout()));
-    scanLineTimer->start(50);
-
-    setStyleSheet(QString(
-        "QDialog {"
-        "    background: transparent;"
-        "}"
-    ));
 }
 
 void WaitingDialog::onAnimationTimeout()
 {
     animValue = (animValue + 2) % 360;
-
-    int pulseR = 230 + (animValue % 25);
-    int pulseG = 57 + (animValue % 15);
-    QString color = QString("rgb(%1,%2,%3)").arg(pulseR).arg(pulseG).arg(70);
-    containerWidget->setStyleSheet(QString(
-        "#container {"
-        "    %1"
-        "    border: 2px solid %2;"
-        "    border-radius: 14px;"
-        "}"
-        "#titleLabel {"
-        "    color: %3;"
-        "    font-size: 18px;"
-        "}"
-        "#messageLabel {"
-        "    color: %4;"
-        "    font-size: 14px;"
-        "}"
-        "#statusLabel {"
-        "    color: %5;"
-        "    font-size: 12px;"
-        "}"
-    ).arg(AppStyle::dialogBackground())
-     .arg(color)
-     .arg(AppStyle::primaryColor)
-     .arg(AppStyle::whiteColor)
-     .arg(AppStyle::textSecondaryColor));
 }
 
 void WaitingDialog::onScanLineTimeout()
@@ -431,34 +357,21 @@ void WaitingDialog::setMessage(const QString &message)
 void WaitingDialog::setSuccess(const QString &message)
 {
     statusLabel->setText(message);
-    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 13, 600));
+    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 10, 500));
     animationTimer->stop();
-    scanLineTimer->stop();
-    loadingIndicator->setColor(QColor(76, 175, 80));
+    loadingIndicator->setColor(QColor(0, 255, 136));
 }
 
 void WaitingDialog::setFailed(const QString &message)
 {
     statusLabel->setText(message);
-    statusLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
+    statusLabel->setStyleSheet(AppStyle::labelStyle("#FF3366", 10, 500));
     animationTimer->stop();
-    scanLineTimer->stop();
-    loadingIndicator->setColor(QColor(230, 57, 70));
+    loadingIndicator->setColor(QColor(255, 51, 102));
 }
 
 void WaitingDialog::paintEvent(QPaintEvent *)
 {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    int scanY = (animValue * height()) / 360;
-    QLinearGradient scanGradient(0, scanY - 25, 0, scanY + 25);
-    scanGradient.setColorAt(0, QColor(230, 57, 70, 0));
-    scanGradient.setColorAt(0.5, QColor(230, 57, 70, 45));
-    scanGradient.setColorAt(1, QColor(230, 57, 70, 0));
-
-    painter.fillRect(rect(), QColor(0, 0, 0, 0));
-    painter.fillRect(0, scanY - 25, width(), 50, scanGradient);
 }
 
 void WaitingDialog::setProgressText(const QString &text)
@@ -471,92 +384,75 @@ CustomMessageBox::CustomMessageBox(const QString &title, const QString &message,
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setModal(true);
-    setFixedSize(450, 260);
+    setFixedSize(340, 150);
     setupUI(title, message, icon);
 }
 
 void CustomMessageBox::setupUI(const QString &title, const QString &message, IconType icon)
 {
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
+    setStyleSheet("background: #111820; border: 1px solid #2A3A4A;");
 
-    QWidget *container = new QWidget(this);
-    container->setObjectName("msgContainer");
-    QVBoxLayout *containerLayout = new QVBoxLayout(container);
-    containerLayout->setContentsMargins(28, 26, 28, 24);
-    containerLayout->setSpacing(18);
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 16, 20, 16);
+    mainLayout->setSpacing(10);
 
     QHBoxLayout *titleLayout = new QHBoxLayout();
     QLabel *iconLabel = new QLabel(this);
     QString iconText, iconColor;
     switch (icon) {
-        case Information: iconText = "i"; iconColor = AppStyle::primaryColor; break;
-        case Warning: iconText = "!"; iconColor = AppStyle::warningColor; break;
-        case Error: iconText = "X"; iconColor = AppStyle::primaryColor; break;
-        case Success: iconText = "OK"; iconColor = AppStyle::successColor; break;
+        case Information: iconText = "ℹ"; iconColor = AppStyle::primaryColor; break;
+        case Warning: iconText = "⚠"; iconColor = AppStyle::warningColor; break;
+        case Error: iconText = "✕"; iconColor = "#FF3366"; break;
+        case Success: iconText = "✓"; iconColor = AppStyle::successColor; break;
     }
     iconLabel->setText(iconText);
-    iconLabel->setStyleSheet(AppStyle::labelStyle(iconColor, 28, 900));
+    iconLabel->setStyleSheet(AppStyle::labelStyle(iconColor, 18, 700));
 
     QLabel *titleLabel = new QLabel(title, this);
-    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 17, 700));
+    titleLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textPrimaryColor, 14, 600));
 
     titleLayout->addWidget(iconLabel);
-    titleLayout->addSpacing(18);
+    titleLayout->addSpacing(6);
     titleLayout->addWidget(titleLabel);
     titleLayout->addStretch();
 
     QLabel *msgLabel = new QLabel(message, this);
     msgLabel->setWordWrap(true);
-    msgLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.85)", 14));
+    msgLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 13, 400));
 
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
 
-    QPushButton *okBtn = createButton("OK", QColor(230, 57, 70));
+    QPushButton *okBtn = createButton("确定", QColor(0, 212, 255));
     btnLayout->addWidget(okBtn);
     connect(okBtn, SIGNAL(clicked()), this, SLOT(accept()));
 
-    containerLayout->addLayout(titleLayout);
-    containerLayout->addWidget(msgLabel);
-    containerLayout->addStretch();
-    containerLayout->addLayout(btnLayout);
-
-    mainLayout->addWidget(container);
-
-    setStyleSheet(QString(
-        "QDialog {"
-        "    background: transparent;"
-        "}"
-        "#msgContainer {"
-        "    %1"
-        "    border: 2px solid %2;"
-        "    border-radius: 14px;"
-        "}"
-    ).arg(AppStyle::dialogBackground())
-     .arg(AppStyle::primaryColorAlpha(0.5)));
+    mainLayout->addLayout(titleLayout);
+    mainLayout->addWidget(msgLabel);
+    mainLayout->addStretch();
+    mainLayout->addLayout(btnLayout);
 }
 
 QPushButton *CustomMessageBox::createButton(const QString &text, const QColor &color)
 {
     QPushButton *btn = new QPushButton(text, this);
-    btn->setFixedSize(110, 44);
+    btn->setFixedSize(70, 28);
     btn->setCursor(Qt::PointingHandCursor);
     btn->setStyleSheet(QString(
         "QPushButton {"
-        "    background: rgba(%1, %2, %3, 0.15);"
-        "    border: 2px solid rgba(%1, %2, %3, 0.7);"
-        "    border-radius: 8px;"
-        "    color: rgb(%1, %2, %3);"
-        "    font-family: %4;"
-        "    font-size: 13px;"
-        "    font-weight: 700;"
+        "    background: transparent;"
+        "    border: 1px solid %1;"
+        "    border-radius: 3px;"
+        "    color: %1;"
+        "    font-family: %2;"
+        "    font-size: 11px;"
+        "    font-weight: 500;"
         "}"
         "QPushButton:hover {"
-        "    background: rgba(%1, %2, %3, 0.3);"
-        "    border-color: rgb(%1, %2, %3);"
+        "    background: %1;"
+        "    color: #0A0E14;"
         "}"
-    ).arg(color.red()).arg(color.green()).arg(color.blue()).arg(AppStyle::fontFamily));
+    ).arg(color.name()).arg(AppStyle::fontFamily));
     return btn;
 }
 
@@ -588,21 +484,117 @@ QMessageBox::StandardButton CustomMessageBox::question(QWidget *parent, const QS
     return QMessageBox::Ok;
 }
 
+CameraCapture::CameraCapture(QObject *parent)
+    : QObject(parent)
+    , m_camera(0)
+    , m_imageCapture(0)
+    , m_capturing(false)
+    , m_displayLabel(0)
+    , m_captureTimer(0)
+{
+    m_captureTimer = new QTimer(this);
+    connect(m_captureTimer, SIGNAL(timeout()), this, SLOT(onCaptureTimeout()));
+}
+
+CameraCapture::~CameraCapture()
+{
+    stopCapture();
+}
+
+void CameraCapture::setDisplayLabel(QLabel *label)
+{
+    m_displayLabel = label;
+}
+
+bool CameraCapture::startCapture()
+{
+    QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
+    if (cameras.isEmpty()) {
+        return false;
+    }
+
+    m_camera = new QCamera(cameras.first(), this);
+    connect(m_camera, SIGNAL(stateChanged(QCamera::State)), this, SLOT(onCameraStateChanged(QCamera::State)));
+
+    m_imageCapture = new QCameraImageCapture(m_camera, this);
+    m_imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
+    connect(m_imageCapture, SIGNAL(imageCaptured(int, QImage)), this, SLOT(onImageCaptured(int, QImage)));
+
+    m_camera->setCaptureMode(QCamera::CaptureStillImage);
+    m_camera->start();
+
+    m_capturing = true;
+    m_captureTimer->start(33);
+
+    return true;
+}
+
+void CameraCapture::stopCapture()
+{
+    m_capturing = false;
+    m_captureTimer->stop();
+
+    if (m_camera) {
+        m_camera->stop();
+        delete m_camera;
+        m_camera = 0;
+    }
+
+    if (m_imageCapture) {
+        delete m_imageCapture;
+        m_imageCapture = 0;
+    }
+}
+
+void CameraCapture::onCameraStateChanged(QCamera::State state)
+{
+    Q_UNUSED(state);
+}
+
+void CameraCapture::onImageCaptured(int id, const QImage &image)
+{
+    Q_UNUSED(id);
+
+    m_lastFrame = image;
+
+    if (m_displayLabel) {
+        QPixmap pixmap = QPixmap::fromImage(image);
+        m_displayLabel->setPixmap(pixmap.scaled(m_displayLabel->size(),
+                                                 Qt::KeepAspectRatio,
+                                                 Qt::SmoothTransformation));
+    }
+
+    emit frameReady(image);
+}
+
+void CameraCapture::onCaptureTimeout()
+{
+    if (m_camera && m_imageCapture && m_capturing) {
+        if (m_camera->state() == QCamera::ActiveState) {
+            if (m_imageCapture->isReadyForCapture()) {
+                m_imageCapture->capture();
+            }
+        }
+    }
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , videoPlayer(0)
+    , cameraCapture(0)
     , videoDisplayLabel(0)
-    , isCapturing(false)
-    , captureInterval(50)
     , robot(0)
     , isUsbConnected(false)
-    , waitingDialog(0)
+    , isCameraCapturing(false)
     , isConnecting(false)
+    , waitingDialog(0)
 {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_TranslucentBackground, false);
 
     videoPlayer = new FFmpegVideoPlayer(this);
+    cameraCapture = new CameraCapture(this);
+
     setupUI();
     setupConnections();
 
@@ -613,7 +605,7 @@ MainWindow::MainWindow(QWidget *parent)
         videoPlayer->play();
     }
 
-    resize(1320, 860);
+    resize(1100, 750);
 }
 
 MainWindow::~MainWindow()
@@ -628,9 +620,9 @@ MainWindow::~MainWindow()
         }
         delete robot;
     }
-    if (captureTimer) {
-        captureTimer->stop();
-        delete captureTimer;
+    if (cameraCapture) {
+        cameraCapture->stopCapture();
+        delete cameraCapture;
     }
 }
 
@@ -643,6 +635,7 @@ void MainWindow::setupUI()
 {
     QWidget *mainContainer = new QWidget(this);
     mainContainer->setObjectName("mainContainer");
+    mainContainer->setStyleSheet("background: #0A0E14;");
     setCentralWidget(mainContainer);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(mainContainer);
@@ -656,238 +649,130 @@ void MainWindow::setupUI()
     centralWidget->setObjectName("centralWidget");
     mainLayout->addWidget(centralWidget);
 
-    QVBoxLayout *centerLayout = new QVBoxLayout(centralWidget);
-    centerLayout->setContentsMargins(28, 22, 28, 22);
-    centerLayout->setSpacing(18);
+    QHBoxLayout *centerHLayout = new QHBoxLayout(centralWidget);
+    centerHLayout->setContentsMargins(8, 8, 8, 8);
+    centerHLayout->setSpacing(8);
 
-    QWidget *videoContainer = new QWidget(this);
-    videoContainer->setObjectName("videoContainer");
-    QVBoxLayout *videoLayout = new QVBoxLayout(videoContainer);
-    videoLayout->setContentsMargins(0, 0, 0, 0);
-    videoLayout->setSpacing(10);
+    QWidget *leftPanel = new QWidget(this);
+    leftPanel->setStyleSheet("background: #111820; border: 1px solid #2A3A4A;");
+    leftPanel->setFixedWidth(240);
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
+    leftLayout->setContentsMargins(12, 12, 12, 12);
+    leftLayout->setSpacing(8);
+
+    QLabel *controlHeader = new QLabel("◆ 控制面板", this);
+    controlHeader->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
+    leftLayout->addWidget(controlHeader);
+
+    QFrame *line1 = new QFrame(this);
+    line1->setFrameShape(QFrame::HLine);
+    line1->setStyleSheet("background: #2A3A4A;");
+    line1->setFixedHeight(1);
+    leftLayout->addWidget(line1);
+
+    btnConnect = new GlowingButton("连接设备", this);
+    btnConnect->setGlowColor(QColor(0, 212, 255));
+
+    btnStartCapture = new GlowingButton("摄像头捕获", this);
+    btnStartCapture->setGlowColor(QColor(0, 255, 136));
+
+    btnStopCapture = new GlowingButton("停止捕获", this);
+    btnStopCapture->setGlowColor(QColor(255, 184, 0));
+
+    leftLayout->addWidget(btnConnect);
+    leftLayout->addWidget(btnStartCapture);
+    leftLayout->addWidget(btnStopCapture);
+    leftLayout->addStretch();
+
+    QLabel *statusHeader = new QLabel("◆ 状态信息", this);
+    statusHeader->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
+    leftLayout->addWidget(statusHeader);
+
+    QFrame *line2 = new QFrame(this);
+    line2->setFrameShape(QFrame::HLine);
+    line2->setStyleSheet("background: #2A3A4A;");
+    line2->setFixedHeight(1);
+    leftLayout->addWidget(line2);
+
+    QWidget *statusInfo = new QWidget(this);
+    QVBoxLayout *statusInfoLayout = new QVBoxLayout(statusInfo);
+    statusInfoLayout->setContentsMargins(0, 8, 0, 0);
+    statusInfoLayout->setSpacing(6);
+
+    QHBoxLayout *connStatus = new QHBoxLayout();
+    statusLed = new StatusIndicator(this);
+    QLabel *connLabel = new QLabel("连接状态:", this);
+    connLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 12, 400));
+    labelStatus = new QLabel("未连接", this);
+    labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 500));
+    connStatus->addWidget(statusLed);
+    connStatus->addWidget(connLabel);
+    connStatus->addWidget(labelStatus);
+    connStatus->addStretch();
+
+    QHBoxLayout *versionLayout = new QHBoxLayout();
+    QLabel *verLabel = new QLabel("版本:", this);
+    verLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 400));
+    versionLabel = new QLabel("v3.0", this);
+    versionLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 400));
+    versionLayout->addWidget(verLabel);
+    versionLayout->addWidget(versionLabel);
+    versionLayout->addStretch();
+
+    statusInfoLayout->addLayout(connStatus);
+    statusInfoLayout->addLayout(versionLayout);
+    leftLayout->addWidget(statusInfo);
+
+    QWidget *rightPanel = new QWidget(this);
+    rightPanel->setStyleSheet("background: #111820; border: 1px solid #2A3A4A;");
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(0);
 
     QWidget *videoHeader = new QWidget(this);
-    videoHeader->setObjectName("videoHeader");
+    videoHeader->setFixedHeight(32);
+    videoHeader->setStyleSheet("background: #0D1318; border-bottom: 1px solid #2A3A4A;");
     QHBoxLayout *videoHeaderLayout = new QHBoxLayout(videoHeader);
-    videoHeaderLayout->setContentsMargins(16, 12, 16, 12);
+    videoHeaderLayout->setContentsMargins(12, 0, 12, 0);
 
-    QLabel *videoIcon = new QLabel("[VIDEO]", this);
-    videoIcon->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 800));
+    QLabel *videoTitle = new QLabel("◆ 视频预览", this);
+    videoTitle->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
 
-    QLabel *videoTitle = new QLabel("LIVE PREVIEW", this);
-    videoTitle->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14, 700));
+    QLabel *videoStatus = new QLabel("● LIVE", this);
+    videoStatus->setStyleSheet(AppStyle::statusBadgeStyle(AppStyle::successColor, AppStyle::successColorAlpha(0.15), 12));
 
-    QLabel *videoStatus = new QLabel("ONLINE", this);
-    videoStatus->setStyleSheet(AppStyle::statusBadgeStyle(AppStyle::successColor, AppStyle::successColorAlpha(0.15)));
-
-    videoHeaderLayout->addWidget(videoIcon);
-    videoHeaderLayout->addSpacing(12);
     videoHeaderLayout->addWidget(videoTitle);
     videoHeaderLayout->addStretch();
     videoHeaderLayout->addWidget(videoStatus);
 
     videoDisplayLabel = new QLabel(this);
-    videoDisplayLabel->setMinimumSize(960, 560);
+    videoDisplayLabel->setMinimumSize(640, 480);
     videoDisplayLabel->setAlignment(Qt::AlignCenter);
-    videoDisplayLabel->setStyleSheet(QString(
-        "%1"
-        "border: 2px solid %2;"
-        "border-radius: 10px;"
-    ).arg(AppStyle::videoDisplayBackground())
-     .arg(AppStyle::primaryColorAlpha(0.35)));
+    videoDisplayLabel->setStyleSheet("background: #050810; border: none;");
 
-    QWidget *videoFooter = new QWidget(this);
-    videoFooter->setObjectName("videoFooter");
-    QHBoxLayout *videoFooterLayout = new QHBoxLayout(videoFooter);
-    videoFooterLayout->setContentsMargins(16, 8, 16, 8);
+    rightLayout->addWidget(videoHeader);
+    rightLayout->addWidget(videoDisplayLabel, 1);
 
-    QLabel *resolution = new QLabel("1920 x 1080", this);
-    resolution->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.45)", 11, 500));
-
-    QLabel *fps = new QLabel("30 FPS", this);
-    fps->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.45)", 11, 500));
-
-    videoFooterLayout->addWidget(resolution);
-    videoFooterLayout->addSpacing(20);
-    videoFooterLayout->addWidget(fps);
-    videoFooterLayout->addStretch();
-
-    videoLayout->addWidget(videoHeader);
-    videoLayout->addWidget(videoDisplayLabel);
-    videoLayout->addWidget(videoFooter);
-
-    QWidget *controlContainer = new QWidget(this);
-    controlContainer->setObjectName("controlContainer");
-    QVBoxLayout *controlContainerLayout = new QVBoxLayout(controlContainer);
-    controlContainerLayout->setContentsMargins(0, 0, 0, 0);
-    controlContainerLayout->setSpacing(12);
-
-    QWidget *controlHeader = new QWidget(this);
-    controlHeader->setObjectName("controlHeader");
-    QHBoxLayout *controlHeaderLayout = new QHBoxLayout(controlHeader);
-    controlHeaderLayout->setContentsMargins(16, 12, 16, 12);
-
-    QLabel *controlIcon = new QLabel("[CTRL]", this);
-    controlIcon->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 800));
-
-    QLabel *controlTitle = new QLabel("CONTROL PANEL", this);
-    controlTitle->setStyleSheet(AppStyle::labelStyle(AppStyle::whiteColor, 14, 700));
-
-    controlHeaderLayout->addWidget(controlIcon);
-    controlHeaderLayout->addSpacing(12);
-    controlHeaderLayout->addWidget(controlTitle);
-    controlHeaderLayout->addStretch();
-
-    QWidget *controlPanel = new QWidget(this);
-    controlPanel->setObjectName("controlPanel");
-    QGridLayout *controlGrid = new QGridLayout(controlPanel);
-    controlGrid->setContentsMargins(18, 18, 18, 18);
-    controlGrid->setSpacing(14);
-
-    btnOpen = new GlowingButton("OPEN FILE", this);
-    btnOpen->setGlowColor(QColor(100, 180, 255));
-    btnOpen->setFixedWidth(150);
-
-    btnPlay = new GlowingButton("PLAY", this);
-    btnPlay->setGlowColor(QColor(76, 175, 80));
-
-    btnPause = new GlowingButton("PAUSE", this);
-    btnPause->setGlowColor(QColor(255, 183, 77));
-
-    btnStop = new GlowingButton("STOP", this);
-    btnStop->setGlowColor(QColor(239, 83, 80));
-
-    btnConnect = new GlowingButton("CONNECT", this);
-    btnConnect->setGlowColor(QColor(230, 57, 70));
-    btnConnect->setFixedWidth(170);
-
-    btnStartCapture = new GlowingButton("CAPTURE", this);
-    btnStartCapture->setGlowColor(QColor(171, 71, 188));
-
-    btnStopCapture = new GlowingButton("STOP CAP", this);
-    btnStopCapture->setGlowColor(QColor(239, 108, 0));
-
-    controlGrid->addWidget(btnOpen, 0, 0);
-    controlGrid->addWidget(btnPlay, 0, 1);
-    controlGrid->addWidget(btnPause, 0, 2);
-    controlGrid->addWidget(btnStop, 0, 3);
-    controlGrid->addWidget(btnConnect, 0, 4);
-    controlGrid->addWidget(btnStartCapture, 0, 5);
-    controlGrid->addWidget(btnStopCapture, 0, 6);
-
-    QWidget *statusPanel = new QWidget(this);
-    statusPanel->setObjectName("statusPanel");
-    QHBoxLayout *statusLayout = new QHBoxLayout(statusPanel);
-    statusLayout->setContentsMargins(18, 14, 18, 14);
-    statusLayout->setSpacing(18);
-
-    statusLed = new StatusIndicator(this);
-
-    QLabel *statusLabel = new QLabel("STATUS:", this);
-    statusLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.55)", 13, 600));
-
-    labelStatus = new QLabel("SYSTEM READY", this);
-    labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 700));
-
-    versionLabel = new QLabel("v3.0 | ElectronBot Client", this);
-    versionLabel->setStyleSheet(AppStyle::labelStyle("rgba(255,255,255,0.25)", 11));
-
-    statusLayout->addWidget(statusLed);
-    statusLayout->addWidget(statusLabel);
-    statusLayout->addWidget(labelStatus);
-    statusLayout->addStretch();
-    statusLayout->addWidget(versionLabel);
-
-    controlContainerLayout->addWidget(controlHeader);
-    controlContainerLayout->addWidget(controlPanel);
-
-    centerLayout->addWidget(videoContainer);
-    centerLayout->addSpacing(18);
-    centerLayout->addWidget(controlContainer);
-    centerLayout->addSpacing(12);
-    centerLayout->addWidget(statusPanel);
-
-    applyStyleSheet();
+    centerHLayout->addWidget(leftPanel);
+    centerHLayout->addWidget(rightPanel, 1);
 
     btnStopCapture->setEnabled(false);
-    btnPlay->setEnabled(false);
-    btnPause->setEnabled(false);
-    btnStop->setEnabled(false);
+    btnStartCapture->setEnabled(false);
 
     robot = new ElectronLowLevel(this);
-    captureTimer = new QTimer(this);
+    cameraCapture->setDisplayLabel(videoDisplayLabel);
 }
 
 void MainWindow::setupConnections()
 {
-    connect(btnOpen, SIGNAL(clicked()), this, SLOT(openFile()));
-    connect(btnPlay, SIGNAL(clicked()), this, SLOT(playVideo()));
-    connect(btnPause, SIGNAL(clicked()), this, SLOT(pauseVideo()));
-    connect(btnStop, SIGNAL(clicked()), this, SLOT(stopVideo()));
     connect(btnConnect, SIGNAL(clicked()), this, SLOT(connectToBot()));
-    connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startScreenCapture()));
-    connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopScreenCapture()));
+    connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startCameraCapture()));
+    connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopCameraCapture()));
 
-    connect(captureTimer, SIGNAL(timeout()), this, SLOT(sendScreenData()));
-    connect(videoPlayer, SIGNAL(frameReady(QImage)), this, SLOT(onFrameReady(QImage)));
+    connect(videoPlayer, SIGNAL(frameReady(QImage)), this, SLOT(onVideoFrameReady(QImage)));
+    connect(cameraCapture, SIGNAL(frameReady(QImage)), this, SLOT(onCameraFrameReady(QImage)));
     connect(robot, SIGNAL(connectionStatusChanged(bool)), this, SLOT(onConnectionStatusChanged(bool)));
     connect(robot, SIGNAL(connectFinished(bool)), this, SLOT(onConnectFinished(bool)));
-}
-
-void MainWindow::applyStyleSheet()
-{
-    setStyleSheet(QString(
-        "QMainWindow {"
-        "    background: transparent;"
-        "}"
-        "#mainContainer {"
-        "    %1"
-        "    border: 1px solid %2;"
-        "    border-radius: 0px;"
-        "}"
-        "#videoContainer {"
-        "    background: transparent;"
-        "}"
-        "#videoHeader {"
-        "    %3"
-        "    border: 1px solid %4;"
-        "    border-radius: 10px 10px 0 0;"
-        "}"
-        "#videoFooter {"
-        "    background: rgba(0, 0, 0, 0.35);"
-        "    border: 1px solid rgba(255, 255, 255, 0.08);"
-        "    border-radius: 0 0 10px 10px;"
-        "}"
-        "#controlContainer {"
-        "    background: transparent;"
-        "}"
-        "#controlHeader {"
-        "    %3"
-        "    border: 1px solid %4;"
-        "    border-radius: 10px 10px 0 0;"
-        "}"
-        "#controlPanel {"
-        "    %5"
-        "    border: 1px solid %6;"
-        "    border-top: none;"
-        "    border-radius: 0 0 10px 10px;"
-        "}"
-        "#statusPanel {"
-        "    %7"
-        "    border: 1px solid %2;"
-        "    border-radius: 10px;"
-        "}"
-        "QLabel {"
-        "    color: %8;"
-        "}"
-    ).arg(AppStyle::mainContainerBackground())
-     .arg(AppStyle::primaryColorAlpha(0.25))
-     .arg(AppStyle::headerGradient())
-     .arg(AppStyle::primaryColorAlpha(0.35))
-     .arg(AppStyle::controlPanelBackground())
-     .arg(AppStyle::primaryColorAlpha(0.2))
-     .arg(AppStyle::statusPanelBackground())
-     .arg(AppStyle::textPrimaryColor));
 }
 
 void MainWindow::showWaitingDialog(const QString &title, const QString &message)
@@ -917,45 +802,6 @@ void MainWindow::showSuccessDialog(const QString &title, const QString &message)
     CustomMessageBox::information(this, title, message);
 }
 
-void MainWindow::openFile()
-{
-    QString fileName = QFileDialog::getOpenFileName(this,
-        "Open Video File", "", "Video Files (*.mp4 *.avi *.mkv *.mov);;All Files (*)");
-    if (!fileName.isEmpty()) {
-        if (videoPlayer->loadVideo(fileName)) {
-            videoPlayer->setLooping(false);
-            videoPlayer->play();
-            btnPlay->setEnabled(false);
-            btnPause->setEnabled(true);
-            btnStop->setEnabled(true);
-            labelStatus->setText("FILE LOADED: " + QFileInfo(fileName).fileName());
-        }
-    }
-}
-
-void MainWindow::playVideo()
-{
-    videoPlayer->play();
-    btnPlay->setEnabled(false);
-    btnPause->setEnabled(true);
-    btnStop->setEnabled(true);
-}
-
-void MainWindow::pauseVideo()
-{
-    videoPlayer->pause();
-    btnPlay->setEnabled(true);
-    btnPause->setEnabled(false);
-}
-
-void MainWindow::stopVideo()
-{
-    videoPlayer->stop();
-    btnPlay->setEnabled(true);
-    btnPause->setEnabled(false);
-    btnStop->setEnabled(false);
-}
-
 void MainWindow::connectToBot()
 {
     if (isUsbConnected) {
@@ -968,16 +814,14 @@ void MainWindow::connectToBot()
     }
 
     if (!robot->Connect()) {
-        showErrorDialog("CONNECTION FAILED",
-            "Unable to connect to ElectronBot.\n"
-            "Please check if the device is connected via USB.");
+        showErrorDialog("连接失败", "无法连接到 ElectronBot。\n请检查设备是否已通过 USB 连接。");
         return;
     }
 
     isConnecting = true;
     btnConnect->setEnabled(false);
 
-    showWaitingDialog("CONNECTING", "Scanning for ElectronBot...");
+    showWaitingDialog("正在连接", "正在扫描 ElectronBot...");
 }
 
 void MainWindow::onWaitingDialogClosed()
@@ -988,7 +832,7 @@ void MainWindow::onWaitingDialogClosed()
 
 void MainWindow::disconnectFromBot()
 {
-    showWaitingDialog("DISCONNECTING", "Closing USB connection...");
+    showWaitingDialog("正在断开", "正在关闭 USB 连接...");
     btnConnect->setEnabled(false);
 
     QTimer::singleShot(100, this, SLOT(onDisconnectTimeout()));
@@ -1010,27 +854,25 @@ void MainWindow::onConnectionStatusChanged(bool connected)
         hideWaitingDialog();
 
         statusLed->setStatus(true);
-        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 14, 700));
-        labelStatus->setText("CONNECTED TO ELECTRONBOT");
-        btnConnect->setText("DISCONNECT");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
+        labelStatus->setText("已连接");
+        btnConnect->setText("断开连接");
+        btnConnect->setGlowColor(QColor(255, 51, 102));
         btnConnect->setEnabled(true);
         btnStartCapture->setEnabled(true);
-
-        if (videoPlayer->loadVideo(":/res/happy.mp4")) {
-            videoPlayer->setLooping(true);
-            videoPlayer->play();
-        }
     } else {
         if (isConnecting) {
             return;
         }
 
-        stopScreenCapture();
+        stopCameraCapture();
         statusLed->setStatus(false);
-        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 14, 700));
-        labelStatus->setText("SYSTEM READY");
-        btnConnect->setText("CONNECT");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 500));
+        labelStatus->setText("未连接");
+        btnConnect->setText("连接设备");
+        btnConnect->setGlowColor(QColor(0, 212, 255));
         btnConnect->setEnabled(true);
+        btnStartCapture->setEnabled(false);
     }
 }
 
@@ -1038,63 +880,63 @@ void MainWindow::onConnectFinished(bool success)
 {
     if (!success && !isUsbConnected) {
         hideWaitingDialog();
-        showErrorDialog("CONNECTION FAILED",
-            "Unable to connect to ElectronBot.\n"
-            "Please check if the device is connected via USB.");
+        showErrorDialog("连接失败", "无法连接到 ElectronBot。\n请检查设备是否已通过 USB 连接。");
         btnConnect->setEnabled(true);
         isConnecting = false;
     }
 }
 
-void MainWindow::startScreenCapture()
+void MainWindow::startCameraCapture()
 {
     if (!isUsbConnected) {
-        showErrorDialog("NOT CONNECTED", "Please connect to ElectronBot first.");
+        showErrorDialog("未连接", "请先连接 ElectronBot。");
         return;
     }
-    isCapturing = true;
+
+    videoPlayer->pause();
+
+    if (!cameraCapture->startCapture()) {
+        videoPlayer->play();
+        showErrorDialog("摄像头错误", "无法访问摄像头。\n请检查摄像头是否已连接。");
+        return;
+    }
+
+    isCameraCapturing = true;
     btnStartCapture->setEnabled(false);
     btnStopCapture->setEnabled(true);
-    videoPlayer->pause();
-    captureTimer->start(captureInterval);
-    labelStatus->setStyleSheet(AppStyle::labelStyle("#AB47BC", 14, 700));
-    labelStatus->setText("SCREEN CAPTURE ACTIVE");
+    labelStatus->setStyleSheet(AppStyle::labelStyle("#00FF88", 12, 500));
+    labelStatus->setText("捕获中");
 }
 
-void MainWindow::stopScreenCapture()
+void MainWindow::stopCameraCapture()
 {
-    if (!isCapturing) return;
+    if (!isCameraCapturing) return;
 
-    isCapturing = false;
-    captureTimer->stop();
+    cameraCapture->stopCapture();
+    isCameraCapturing = false;
     btnStartCapture->setEnabled(true);
     btnStopCapture->setEnabled(false);
+
     videoPlayer->play();
 
     if (isUsbConnected) {
-        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 14, 700));
-        labelStatus->setText("CONNECTED TO ELECTRONBOT");
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
+        labelStatus->setText("已连接");
     }
 }
 
-void MainWindow::sendScreenData()
+void MainWindow::onVideoFrameReady(const QImage &image)
 {
-    if (!isCapturing || !isUsbConnected) {
+    if (!isUsbConnected || isCameraCapturing) {
         return;
     }
-
-    QScreen *screen = QGuiApplication::primaryScreen();
-    if (!screen) return;
-
-    QPixmap pixmap = screen->grabWindow(QDesktopWidget().winId());
-    QImage image = pixmap.toImage();
 
     robot->SetImageSrc(image);
 }
 
-void MainWindow::onFrameReady(const QImage &image)
+void MainWindow::onCameraFrameReady(const QImage &image)
 {
-    if (!isUsbConnected) {
+    if (!isUsbConnected || !isCameraCapturing) {
         return;
     }
 

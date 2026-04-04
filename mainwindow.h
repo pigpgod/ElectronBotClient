@@ -9,6 +9,7 @@
  * - LoadingIndicator: 加载动画指示器
  * - WaitingDialog: 等待对话框
  * - CustomMessageBox: 自定义消息框
+ * - CameraCapture: 摄像头捕获类
  * - MainWindow: 主窗口类
  */
 
@@ -38,6 +39,10 @@
 #include <QDialog>
 #include <QProgressBar>
 #include <QMessageBox>
+#include <QCamera>
+#include <QCameraInfo>
+#include <QCameraImageCapture>
+#include <QCameraViewfinderSettings>
 
 #include "ffmpegvideoplayer.h"
 #include "electron_low_level.h"
@@ -186,6 +191,35 @@ private:
     QPushButton *createButton(const QString &text, const QColor &color);
 };
 
+class CameraCapture : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit CameraCapture(QObject *parent = 0);
+    ~CameraCapture();
+    bool startCapture();
+    void stopCapture();
+    bool isCapturing() const { return m_capturing; }
+    void setDisplayLabel(QLabel *label);
+
+signals:
+    void frameReady(const QImage &image);
+
+private slots:
+    void onCameraStateChanged(QCamera::State state);
+    void onImageCaptured(int id, const QImage &image);
+    void onCaptureTimeout();
+
+private:
+    QCamera *m_camera;
+    QCameraImageCapture *m_imageCapture;
+    bool m_capturing;
+    QLabel *m_displayLabel;
+    QTimer *m_captureTimer;
+    QImage m_lastFrame;
+};
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -198,16 +232,12 @@ protected:
     void resizeEvent(QResizeEvent *event);
 
 private slots:
-    void openFile();
-    void playVideo();
-    void pauseVideo();
-    void stopVideo();
     void connectToBot();
     void disconnectFromBot();
-    void sendScreenData();
-    void startScreenCapture();
-    void stopScreenCapture();
-    void onFrameReady(const QImage &image);
+    void startCameraCapture();
+    void stopCameraCapture();
+    void onVideoFrameReady(const QImage &image);
+    void onCameraFrameReady(const QImage &image);
     void onConnectionStatusChanged(bool connected);
     void onConnectFinished(bool success);
     void onWaitingDialogClosed();
@@ -226,12 +256,9 @@ private:
     QWidget *centralWidget;
 
     FFmpegVideoPlayer *videoPlayer;
+    CameraCapture *cameraCapture;
     QLabel *videoDisplayLabel;
 
-    GlowingButton *btnOpen;
-    GlowingButton *btnPlay;
-    GlowingButton *btnPause;
-    GlowingButton *btnStop;
     GlowingButton *btnConnect;
     GlowingButton *btnStartCapture;
     GlowingButton *btnStopCapture;
@@ -242,9 +269,7 @@ private:
 
     ElectronLowLevel *robot;
     bool isUsbConnected;
-    QTimer *captureTimer;
-    bool isCapturing;
-    int captureInterval;
+    bool isCameraCapturing;
     bool isConnecting;
 
     WaitingDialog *waitingDialog;
