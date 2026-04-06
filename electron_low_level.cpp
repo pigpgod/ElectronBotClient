@@ -362,14 +362,17 @@ void ElectronLowLevel::SetJointAngles(float j1, float j2, float j3, float j4, fl
 {
     float jointAngleSetPoints[kJointCount] = {j1, j2, j3, j4, j5, j6};
 
-    extraDataBufferTx[pingPongWriteIndex][0] = enable ? 1 : 0;
-
-    for (int j = 0; j < kJointCount; j++)
+    for (int bufIndex = 0; bufIndex < 2; bufIndex++)
     {
-        unsigned char* bytes = reinterpret_cast<unsigned char*>(&jointAngleSetPoints[j]);
-        for (int i = 0; i < 4; i++)
+        extraDataBufferTx[bufIndex][0] = enable ? 1 : 0;
+
+        for (int j = 0; j < kJointCount; j++)
         {
-            extraDataBufferTx[pingPongWriteIndex][j * 4 + i + 1] = bytes[i];
+            unsigned char* bytes = reinterpret_cast<unsigned char*>(&jointAngleSetPoints[j]);
+            for (int i = 0; i < 4; i++)
+            {
+                extraDataBufferTx[bufIndex][j * 4 + i + 1] = bytes[i];
+            }
         }
     }
 }

@@ -682,6 +682,71 @@ void MainWindow::setupUI()
     leftLayout->addWidget(btnConnect);
     leftLayout->addWidget(btnStartCapture);
     leftLayout->addWidget(btnStopCapture);
+
+    QLabel *motorHeader = new QLabel("◆ 电机控制", this);
+    motorHeader->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
+    leftLayout->addWidget(motorHeader);
+
+    QFrame *line3 = new QFrame(this);
+    line3->setFrameShape(QFrame::HLine);
+    line3->setStyleSheet("background: #2A3A4A;");
+    line3->setFixedHeight(1);
+    leftLayout->addWidget(line3);
+
+    QString jointNames[6] = {"J1 头部", "J2 左肩部", "J3 左手", "J4 右肩部", "J5 右手", "J6 底座"};
+    QString sliderStyle = QString(
+        "QSlider::groove:horizontal {"
+        "    border: 1px solid #2A3A4A;"
+        "    height: 6px;"
+        "    background: #1A2332;"
+        "    border-radius: 3px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "    background: %1;"
+        "    border: 1px solid %1;"
+        "    width: 14px;"
+        "    margin: -5px 0;"
+        "    border-radius: 7px;"
+        "}"
+        "QSlider::sub-page:horizontal {"
+        "    background: %1;"
+        "    border-radius: 3px;"
+        "}"
+    ).arg(AppStyle::primaryColor);
+
+    for (int i = 0; i < 6; ++i) {
+        QWidget *sliderWidget = new QWidget(this);
+        QVBoxLayout *sliderLayout = new QVBoxLayout(sliderWidget);
+        sliderLayout->setContentsMargins(0, 4, 0, 4);
+        sliderLayout->setSpacing(2);
+
+        QHBoxLayout *labelLayout = new QHBoxLayout();
+        jointNameLabels[i] = new QLabel(jointNames[i], this);
+        jointNameLabels[i]->setStyleSheet(AppStyle::labelStyle(AppStyle::textSecondaryColor, 11, 500));
+        
+        jointValueLabels[i] = new QLabel("0°", this);
+        jointValueLabels[i]->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 11, 600));
+        jointValueLabels[i]->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        
+        labelLayout->addWidget(jointNameLabels[i]);
+        labelLayout->addWidget(jointValueLabels[i]);
+
+        jointSliders[i] = new QSlider(Qt::Horizontal, this);
+        jointSliders[i]->setRange(-180, 180);
+        jointSliders[i]->setValue(0);
+        jointSliders[i]->setStyleSheet(sliderStyle);
+        jointSliders[i]->setFixedHeight(20);
+
+        sliderLayout->addLayout(labelLayout);
+        sliderLayout->addWidget(jointSliders[i]);
+
+        leftLayout->addWidget(sliderWidget);
+    }
+
+    btnReset = new GlowingButton("复位电机", this);
+    btnReset->setGlowColor(QColor(255, 184, 0));
+    leftLayout->addWidget(btnReset);
+
     leftLayout->addStretch();
 
     QLabel *statusHeader = new QLabel("◆ 状态信息", this);
@@ -768,6 +833,11 @@ void MainWindow::setupConnections()
     connect(btnConnect, SIGNAL(clicked()), this, SLOT(connectToBot()));
     connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startCameraCapture()));
     connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopCameraCapture()));
+    connect(btnReset, SIGNAL(clicked()), this, SLOT(onResetClicked()));
+
+    for (int i = 0; i < 6; ++i) {
+        connect(jointSliders[i], SIGNAL(valueChanged(int)), this, SLOT(onSliderValueChanged(int)));
+    }
 
     connect(videoPlayer, SIGNAL(frameReady(QImage)), this, SLOT(onVideoFrameReady(QImage)));
     connect(cameraCapture, SIGNAL(frameReady(QImage)), this, SLOT(onCameraFrameReady(QImage)));
@@ -941,4 +1011,42 @@ void MainWindow::onCameraFrameReady(const QImage &image)
     }
 
     robot->SetImageSrc(image);
+}
+
+void MainWindow::onSliderValueChanged(int value)
+{
+    Q_UNUSED(value);
+
+    QSlider *senderSlider = qobject_cast<QSlider*>(sender());
+    if (!senderSlider) return;
+
+    for (int i = 0; i < 6; ++i) {
+        if (jointSliders[i] == senderSlider) {
+            int angle = jointSliders[i]->value();
+            jointValueLabels[i]->setText(QString("%1°").arg(angle));
+            break;
+        }
+    }
+
+    if (isUsbConnected) {
+        float angles[6];
+        for (int i = 0; i < 6; ++i) {
+            angles[i] = static_cast<float>(jointSliders[i]->value());
+        }
+        robot->SetJointAngles(angles[0], angles[1], angles[2], angles[3], angles[4], angles[5], true);
+    }
+}
+
+void MainWindow::onResetClicked()
+{
+    for (int i = 0; i < 6; ++i) {
+        jointSliders[i]->blockSignals(true);
+        jointSliders[i]->setValue(0);
+        jointValueLabels[i]->setText("0°");
+        jointSliders[i]->blockSignals(false);
+    }
+
+    if (isUsbConnected) {
+        robot->SetJointAngles(0, 0, 0, 0, 0, 0, true);
+    }
 }

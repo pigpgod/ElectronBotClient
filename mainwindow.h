@@ -242,6 +242,8 @@ private slots:
     void onConnectFinished(bool success);
     void onWaitingDialogClosed();
     void onDisconnectTimeout();
+    void onSliderValueChanged(int value);
+    void onResetClicked();
 
 private:
     void setupUI();
@@ -262,6 +264,11 @@ private:
     GlowingButton *btnConnect;
     GlowingButton *btnStartCapture;
     GlowingButton *btnStopCapture;
+    GlowingButton *btnReset;
+
+    QSlider *jointSliders[6];
+    QLabel *jointValueLabels[6];
+    QLabel *jointNameLabels[6];
 
     QLabel *labelStatus;
     QLabel *versionLabel;
