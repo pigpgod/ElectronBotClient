@@ -47,6 +47,7 @@
 #include "ffmpegvideoplayer.h"
 #include "electron_low_level.h"
 #include "appstyle.h"
+#include "voskrecognizer.h"
 
 class CustomTitleBar : public QWidget
 {
@@ -244,6 +245,13 @@ private slots:
     void onDisconnectTimeout();
     void onSliderValueChanged(int value);
     void onResetClicked();
+    void onVoiceControlClicked();
+    void onVoiceResultReady(const QString &text);
+    void onVoicePartialResult(const QString &text);
+    void onVoiceError(const QString &message);
+    void onVoiceRecognitionStarted();
+    void onVoiceRecognitionStopped();
+    void processVoiceCommand(const QString &command);
 
 private:
     void setupUI();
@@ -265,6 +273,9 @@ private:
     GlowingButton *btnStartCapture;
     GlowingButton *btnStopCapture;
     GlowingButton *btnReset;
+    GlowingButton *btnVoiceControl;
+
+    QLabel *voiceResultLabel;
 
     QSlider *jointSliders[6];
     QLabel *jointValueLabels[6];
@@ -275,9 +286,11 @@ private:
     StatusIndicator *statusLed;
 
     ElectronLowLevel *robot;
+    VoskRecognizer *voskRecognizer;
     bool isUsbConnected;
     bool isCameraCapturing;
     bool isConnecting;
+    bool isVoiceActive;
 
     WaitingDialog *waitingDialog;
 };

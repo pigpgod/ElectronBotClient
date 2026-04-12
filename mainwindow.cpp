@@ -14,6 +14,7 @@
 #include "mainwindow.h"
 #include <QPainterPath>
 #include <QtMath>
+#include <QCoreApplication>
 
 CustomTitleBar::CustomTitleBar(QWidget *parent)
     : QWidget(parent)
@@ -584,9 +585,11 @@ MainWindow::MainWindow(QWidget *parent)
     , cameraCapture(0)
     , videoDisplayLabel(0)
     , robot(0)
+    , voskRecognizer(0)
     , isUsbConnected(false)
     , isCameraCapturing(false)
     , isConnecting(false)
+    , isVoiceActive(false)
     , waitingDialog(0)
 {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
@@ -594,6 +597,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     videoPlayer = new FFmpegVideoPlayer(this);
     cameraCapture = new CameraCapture(this);
+
+    voskRecognizer = new VoskRecognizer(this);
+    QString modelPath = QCoreApplication::applicationDirPath() + "/vosk-models/vosk-model-small-cn-0.3";
+    voskRecognizer->setModelPath(modelPath);
 
     setupUI();
     setupConnections();
@@ -610,6 +617,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (voskRecognizer && voskRecognizer->isRunning()) {
+        voskRecognizer->stop();
+    }
     if (waitingDialog) {
         waitingDialog->close();
         delete waitingDialog;
@@ -682,6 +692,16 @@ void MainWindow::setupUI()
     leftLayout->addWidget(btnConnect);
     leftLayout->addWidget(btnStartCapture);
     leftLayout->addWidget(btnStopCapture);
+
+    btnVoiceControl = new GlowingButton("语音控制", this);
+    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
+    leftLayout->addWidget(btnVoiceControl);
+
+    voiceResultLabel = new QLabel("语音: 未启动", this);
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
+    voiceResultLabel->setWordWrap(true);
+    voiceResultLabel->setMaximumHeight(40);
+    leftLayout->addWidget(voiceResultLabel);
 
     QLabel *motorHeader = new QLabel("◆ 电机控制", this);
     motorHeader->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
@@ -834,6 +854,7 @@ void MainWindow::setupConnections()
     connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startCameraCapture()));
     connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopCameraCapture()));
     connect(btnReset, SIGNAL(clicked()), this, SLOT(onResetClicked()));
+    connect(btnVoiceControl, SIGNAL(clicked()), this, SLOT(onVoiceControlClicked()));
 
     for (int i = 0; i < 6; ++i) {
         connect(jointSliders[i], SIGNAL(valueChanged(int)), this, SLOT(onSliderValueChanged(int)));
@@ -843,6 +864,12 @@ void MainWindow::setupConnections()
     connect(cameraCapture, SIGNAL(frameReady(QImage)), this, SLOT(onCameraFrameReady(QImage)));
     connect(robot, SIGNAL(connectionStatusChanged(bool)), this, SLOT(onConnectionStatusChanged(bool)));
     connect(robot, SIGNAL(connectFinished(bool)), this, SLOT(onConnectFinished(bool)));
+
+    connect(voskRecognizer, SIGNAL(resultReady(QString)), this, SLOT(onVoiceResultReady(QString)));
+    connect(voskRecognizer, SIGNAL(partialResultReady(QString)), this, SLOT(onVoicePartialResult(QString)));
+    connect(voskRecognizer, SIGNAL(errorOccurred(QString)), this, SLOT(onVoiceError(QString)));
+    connect(voskRecognizer, SIGNAL(recognitionStarted()), this, SLOT(onVoiceRecognitionStarted()));
+    connect(voskRecognizer, SIGNAL(recognitionStopped()), this, SLOT(onVoiceRecognitionStopped()));
 }
 
 void MainWindow::showWaitingDialog(const QString &title, const QString &message)
@@ -1048,5 +1075,89 @@ void MainWindow::onResetClicked()
 
     if (isUsbConnected) {
         robot->SetJointAngles(0, 0, 0, 0, 0, 0, true);
+    }
+}
+
+void MainWindow::onVoiceControlClicked()
+{
+    if (isVoiceActive) {
+        voskRecognizer->stop();
+    } else {
+        voskRecognizer->start();
+    }
+}
+
+void MainWindow::onVoiceResultReady(const QString &text)
+{
+    voiceResultLabel->setText(QString("语音: %1").arg(text));
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 11, 500));
+    processVoiceCommand(text);
+}
+
+void MainWindow::onVoicePartialResult(const QString &text)
+{
+    voiceResultLabel->setText(QString("识别中: %1").arg(text));
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 11, 400));
+}
+
+void MainWindow::onVoiceError(const QString &message)
+{
+    voiceResultLabel->setText(QString("语音错误: %1").arg(message));
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle("#FF3366", 11, 500));
+    isVoiceActive = false;
+    btnVoiceControl->setText("语音控制");
+    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
+}
+
+void MainWindow::onVoiceRecognitionStarted()
+{
+    isVoiceActive = true;
+    btnVoiceControl->setText("停止语音");
+    btnVoiceControl->setGlowColor(QColor(255, 51, 102));
+    voiceResultLabel->setText("语音: 正在监听...");
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 11, 500));
+}
+
+void MainWindow::onVoiceRecognitionStopped()
+{
+    isVoiceActive = false;
+    btnVoiceControl->setText("语音控制");
+    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
+    voiceResultLabel->setText("语音: 已停止");
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
+}
+
+void MainWindow::processVoiceCommand(const QString &command)
+{
+    QString cmd = command.toLower().trimmed();
+
+    if (cmd.contains("连接")) {
+        if (!isUsbConnected) connectToBot();
+    } else if (cmd.contains("断开")) {
+        if (isUsbConnected) disconnectFromBot();
+    } else if (cmd.contains("摄像头") || cmd.contains("开启")) {
+        if (isUsbConnected && !isCameraCapturing) startCameraCapture();
+    } else if (cmd.contains("停止") || cmd.contains("关闭")) {
+        if (isCameraCapturing) stopCameraCapture();
+    } else if (cmd.contains("复位") || cmd.contains("归零")) {
+        onResetClicked();
+    } else if (cmd.contains("一号") || cmd.contains("头部")) {
+        if (cmd.contains("左")) jointSliders[0]->setValue(jointSliders[0]->value() - 15);
+        else if (cmd.contains("右")) jointSliders[0]->setValue(jointSliders[0]->value() + 15);
+    } else if (cmd.contains("二号") || cmd.contains("左肩")) {
+        if (cmd.contains("上")) jointSliders[1]->setValue(jointSliders[1]->value() + 15);
+        else if (cmd.contains("下")) jointSliders[1]->setValue(jointSliders[1]->value() - 15);
+    } else if (cmd.contains("三号") || cmd.contains("左手")) {
+        if (cmd.contains("上")) jointSliders[2]->setValue(jointSliders[2]->value() + 15);
+        else if (cmd.contains("下")) jointSliders[2]->setValue(jointSliders[2]->value() - 15);
+    } else if (cmd.contains("四号") || cmd.contains("右肩")) {
+        if (cmd.contains("上")) jointSliders[3]->setValue(jointSliders[3]->value() + 15);
+        else if (cmd.contains("下")) jointSliders[3]->setValue(jointSliders[3]->value() - 15);
+    } else if (cmd.contains("五号") || cmd.contains("右手")) {
+        if (cmd.contains("上")) jointSliders[4]->setValue(jointSliders[4]->value() + 15);
+        else if (cmd.contains("下")) jointSliders[4]->setValue(jointSliders[4]->value() - 15);
+    } else if (cmd.contains("六号") || cmd.contains("底座")) {
+        if (cmd.contains("左")) jointSliders[5]->setValue(jointSliders[5]->value() - 15);
+        else if (cmd.contains("右")) jointSliders[5]->setValue(jointSliders[5]->value() + 15);
     }
 }
