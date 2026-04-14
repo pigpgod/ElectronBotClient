@@ -662,7 +662,7 @@ MainWindow::MainWindow(QWidget *parent)
     cameraCapture = new CameraCapture(this);
 
     voskRecognizer = new VoskRecognizer(this);
-    QString modelPath = QCoreApplication::applicationDirPath() + "/vosk-models/vosk-model-cn-0.22";
+    QString modelPath = QCoreApplication::applicationDirPath() + "/vosk-models/vosk-model-cn";
     voskRecognizer->setModelPath(modelPath);
 
     setupUI();
