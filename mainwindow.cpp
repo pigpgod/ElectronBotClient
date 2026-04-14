@@ -15,6 +15,7 @@
 #include <QPainterPath>
 #include <QtMath>
 #include <QCoreApplication>
+#include <QAbstractVideoBuffer>
 
 CustomTitleBar::CustomTitleBar(QWidget *parent)
     : QWidget(parent)
@@ -490,11 +491,14 @@ CameraCapture::CameraCapture(QObject *parent)
     , m_camera(0)
     , m_imageCapture(0)
     , m_capturing(false)
+    , m_capturePending(false)
     , m_displayLabel(0)
     , m_captureTimer(0)
 {
     m_captureTimer = new QTimer(this);
-    connect(m_captureTimer, SIGNAL(timeout()), this, SLOT(onCaptureTimeout()));
+    if (m_captureTimer) {
+        connect(m_captureTimer, SIGNAL(timeout()), this, SLOT(onCaptureTimeout()));
+    }
 }
 
 CameraCapture::~CameraCapture()
@@ -509,23 +513,50 @@ void CameraCapture::setDisplayLabel(QLabel *label)
 
 bool CameraCapture::startCapture()
 {
+    // 确保之前的资源已清理
+    stopCapture();
+
     QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
     if (cameras.isEmpty()) {
+        emit captureError("未检测到摄像头设备");
         return false;
     }
 
-    m_camera = new QCamera(cameras.first(), this);
+    QCameraInfo selectedCamera = cameras.first();
+    for (const QCameraInfo &camera : cameras) {
+        if (!camera.description().contains("audio", Qt::CaseInsensitive) &&
+            !camera.description().contains("麦克风", Qt::CaseInsensitive)) {
+            selectedCamera = camera;
+            break;
+        }
+    }
+
+    m_camera = new QCamera(selectedCamera, this);
+    if (!m_camera) {
+        emit captureError("无法创建摄像头对象");
+        return false;
+    }
+
     connect(m_camera, SIGNAL(stateChanged(QCamera::State)), this, SLOT(onCameraStateChanged(QCamera::State)));
+    connect(m_camera, SIGNAL(error(QCamera::Error)), this, SLOT(onCameraError(QCamera::Error)));
 
     m_imageCapture = new QCameraImageCapture(m_camera, this);
-    m_imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
+    if (!m_imageCapture) {
+        emit captureError("无法创建图像捕获对象");
+        if (m_camera) {
+            m_camera->deleteLater();
+            m_camera = 0;
+        }
+        return false;
+    }
+
     connect(m_imageCapture, SIGNAL(imageCaptured(int, QImage)), this, SLOT(onImageCaptured(int, QImage)));
 
     m_camera->setCaptureMode(QCamera::CaptureStillImage);
-    m_camera->start();
+    m_camera->load();
 
     m_capturing = true;
-    m_captureTimer->start(33);
+    m_capturePending = false;
 
     return true;
 }
@@ -533,29 +564,62 @@ bool CameraCapture::startCapture()
 void CameraCapture::stopCapture()
 {
     m_capturing = false;
-    m_captureTimer->stop();
+    m_capturePending = false;
+
+    if (m_captureTimer) {
+        m_captureTimer->stop();
+    }
 
     if (m_camera) {
         m_camera->stop();
-        delete m_camera;
+        m_camera->deleteLater();
         m_camera = 0;
     }
 
     if (m_imageCapture) {
-        delete m_imageCapture;
+        m_imageCapture->deleteLater();
         m_imageCapture = 0;
     }
 }
 
 void CameraCapture::onCameraStateChanged(QCamera::State state)
 {
-    Q_UNUSED(state);
+    if (!m_camera) return;
+
+    if (state == QCamera::LoadedState) {
+        m_camera->start();
+    } else if (state == QCamera::ActiveState) {
+        if (m_captureTimer && !m_captureTimer->isActive()) {
+            m_captureTimer->start(100);
+        }
+        emit captureStarted();
+    } else if (state == QCamera::UnloadedState) {
+        if (m_captureTimer) {
+            m_captureTimer->stop();
+        }
+    }
+}
+
+void CameraCapture::onCameraError(QCamera::Error error)
+{
+    Q_UNUSED(error);
+    QString errMsg;
+    if (m_camera) {
+        errMsg = m_camera->errorString();
+    }
+    if (errMsg.isEmpty()) {
+        errMsg = "摄像头发生未知错误";
+    }
+    emit captureError(errMsg);
 }
 
 void CameraCapture::onImageCaptured(int id, const QImage &image)
 {
     Q_UNUSED(id);
-
+    m_capturePending = false;
+    
+    if (image.isNull()) return;
+    
     m_lastFrame = image;
 
     if (m_displayLabel) {
@@ -570,13 +634,13 @@ void CameraCapture::onImageCaptured(int id, const QImage &image)
 
 void CameraCapture::onCaptureTimeout()
 {
-    if (m_camera && m_imageCapture && m_capturing) {
-        if (m_camera->state() == QCamera::ActiveState) {
-            if (m_imageCapture->isReadyForCapture()) {
-                m_imageCapture->capture();
-            }
-        }
-    }
+    if (!m_camera || !m_imageCapture || !m_capturing) return;
+    if (m_camera->state() != QCamera::ActiveState) return;
+    if (m_capturePending) return;
+    if (!m_imageCapture->isReadyForCapture()) return;
+
+    m_capturePending = true;
+    m_imageCapture->capture();
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -589,7 +653,6 @@ MainWindow::MainWindow(QWidget *parent)
     , isUsbConnected(false)
     , isCameraCapturing(false)
     , isConnecting(false)
-    , isVoiceActive(false)
     , waitingDialog(0)
 {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
@@ -599,11 +662,24 @@ MainWindow::MainWindow(QWidget *parent)
     cameraCapture = new CameraCapture(this);
 
     voskRecognizer = new VoskRecognizer(this);
-    QString modelPath = QCoreApplication::applicationDirPath() + "/vosk-models/vosk-model-small-cn-0.3";
+    QString modelPath = QCoreApplication::applicationDirPath() + "/vosk-models/vosk-model-cn-0.22";
     voskRecognizer->setModelPath(modelPath);
 
     setupUI();
+
+    QList<QAudioDeviceInfo> audioDevices = voskRecognizer->availableInputDevices();
+    for (int i = 0; i < audioDevices.size(); ++i) {
+        audioDeviceComboBox->addItem(audioDevices[i].deviceName(), QVariant::fromValue(audioDevices[i]));
+    }
+    if (!audioDevices.isEmpty()) {
+        voskRecognizer->setInputDevice(audioDevices[0]);
+    }
+
     setupConnections();
+
+    voiceResultLabel->setText("语音: 正在初始化模型...");
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle("#FFB400", 11, 400));
+    voskRecognizer->initialize();
 
     videoPlayer->setDisplayWidget(videoDisplayLabel);
     videoPlayer->setLooping(true);
@@ -617,22 +693,43 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (voskRecognizer && voskRecognizer->isRunning()) {
-        voskRecognizer->stop();
+    // 停止并清理语音识别
+    if (voskRecognizer) {
+        if (voskRecognizer->isRunning()) {
+            voskRecognizer->stop();
+        }
+        delete voskRecognizer;
+        voskRecognizer = 0;
     }
+    
+    // 清理等待对话框
     if (waitingDialog) {
         waitingDialog->close();
         delete waitingDialog;
+        waitingDialog = 0;
     }
+    
+    // 清理机器人连接
     if (robot) {
         if (isUsbConnected) {
             robot->Disconnect();
         }
         delete robot;
+        robot = 0;
     }
+    
+    // 停止并清理摄像头
     if (cameraCapture) {
         cameraCapture->stopCapture();
         delete cameraCapture;
+        cameraCapture = 0;
+    }
+    
+    // 停止并清理视频播放器
+    if (videoPlayer) {
+        videoPlayer->stop();
+        delete videoPlayer;
+        videoPlayer = 0;
     }
 }
 
@@ -683,25 +780,70 @@ void MainWindow::setupUI()
     btnConnect = new GlowingButton("连接设备", this);
     btnConnect->setGlowColor(QColor(0, 212, 255));
 
-    btnStartCapture = new GlowingButton("摄像头捕获", this);
-    btnStartCapture->setGlowColor(QColor(0, 255, 136));
-
-    btnStopCapture = new GlowingButton("停止捕获", this);
-    btnStopCapture->setGlowColor(QColor(255, 184, 0));
+    btnCamera = new GlowingButton("开启摄像头", this);
+    btnCamera->setGlowColor(QColor(0, 255, 136));
 
     leftLayout->addWidget(btnConnect);
-    leftLayout->addWidget(btnStartCapture);
-    leftLayout->addWidget(btnStopCapture);
+    leftLayout->addWidget(btnCamera);
 
-    btnVoiceControl = new GlowingButton("语音控制", this);
-    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
-    leftLayout->addWidget(btnVoiceControl);
-
-    voiceResultLabel = new QLabel("语音: 未启动", this);
+    voiceResultLabel = new QLabel("语音: 正在初始化...", this);
     voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
     voiceResultLabel->setWordWrap(true);
     voiceResultLabel->setMaximumHeight(40);
     leftLayout->addWidget(voiceResultLabel);
+
+    QLabel *audioDeviceLabel = new QLabel("录音设备:", this);
+    audioDeviceLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
+    leftLayout->addWidget(audioDeviceLabel);
+
+    audioDeviceComboBox = new QComboBox(this);
+    audioDeviceComboBox->setFixedHeight(28);
+    audioDeviceComboBox->setStyleSheet(QString(
+        "QComboBox {"
+        "    background: #1A2332;"
+        "    color: #B0B8C4;"
+        "    border: 1px solid #2A3A4A;"
+        "    border-radius: 4px;"
+        "    padding: 4px 8px;"
+        "}"
+        "QComboBox:hover { border-color: %1; }"
+        "QComboBox::drop-down { border: none; width: 20px; }"
+        "QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #6B7785; margin-right: 4px; }"
+        "QComboBox QAbstractItemView { background: #1A2332; color: #B0B8C4; border: 1px solid #2A3A4A; selection-background-color: %1; }"
+    ).arg(AppStyle::primaryColor));
+    leftLayout->addWidget(audioDeviceComboBox);
+
+    QLabel *gainLabel = new QLabel("音量增益:", this);
+    gainLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
+    leftLayout->addWidget(gainLabel);
+
+    QHBoxLayout *gainLayout = new QHBoxLayout();
+    volumeGainSlider = new QSlider(Qt::Horizontal, this);
+    volumeGainSlider->setRange(10, 50);
+    volumeGainSlider->setValue(50);
+    volumeGainSlider->setFixedHeight(20);
+    volumeGainSlider->setStyleSheet(QString(
+        "QSlider::groove:horizontal {"
+        "    border: 1px solid #2A3A4A;"
+        "    height: 4px;"
+        "    background: #1A2332;"
+        "    border-radius: 2px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "    background: %1;"
+        "    border: 1px solid %1;"
+        "    width: 12px;"
+        "    margin: -4px 0;"
+        "    border-radius: 6px;"
+        "}"
+    ).arg(AppStyle::primaryColor));
+    gainLayout->addWidget(volumeGainSlider);
+
+    volumeGainLabel = new QLabel("5.0x", this);
+    volumeGainLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
+    volumeGainLabel->setFixedWidth(35);
+    gainLayout->addWidget(volumeGainLabel);
+    leftLayout->addLayout(gainLayout);
 
     QLabel *motorHeader = new QLabel("◆ 电机控制", this);
     motorHeader->setStyleSheet(AppStyle::labelStyle(AppStyle::primaryColor, 13, 600));
@@ -841,8 +983,7 @@ void MainWindow::setupUI()
     centerHLayout->addWidget(leftPanel);
     centerHLayout->addWidget(rightPanel, 1);
 
-    btnStopCapture->setEnabled(false);
-    btnStartCapture->setEnabled(false);
+    btnCamera->setEnabled(false);
 
     robot = new ElectronLowLevel(this);
     cameraCapture->setDisplayLabel(videoDisplayLabel);
@@ -851,10 +992,12 @@ void MainWindow::setupUI()
 void MainWindow::setupConnections()
 {
     connect(btnConnect, SIGNAL(clicked()), this, SLOT(connectToBot()));
-    connect(btnStartCapture, SIGNAL(clicked()), this, SLOT(startCameraCapture()));
-    connect(btnStopCapture, SIGNAL(clicked()), this, SLOT(stopCameraCapture()));
+    connect(btnCamera, SIGNAL(clicked()), this, SLOT(onCameraClicked()));
+    connect(cameraCapture, SIGNAL(captureStarted()), this, SLOT(onCameraCaptureStarted()));
+    connect(cameraCapture, SIGNAL(captureError(QString)), this, SLOT(onCameraCaptureError(QString)));
     connect(btnReset, SIGNAL(clicked()), this, SLOT(onResetClicked()));
-    connect(btnVoiceControl, SIGNAL(clicked()), this, SLOT(onVoiceControlClicked()));
+    connect(audioDeviceComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(onAudioDeviceChanged(int)));
+    connect(volumeGainSlider, SIGNAL(valueChanged(int)), this, SLOT(onVolumeGainChanged(int)));
 
     for (int i = 0; i < 6; ++i) {
         connect(jointSliders[i], SIGNAL(valueChanged(int)), this, SLOT(onSliderValueChanged(int)));
@@ -870,6 +1013,7 @@ void MainWindow::setupConnections()
     connect(voskRecognizer, SIGNAL(errorOccurred(QString)), this, SLOT(onVoiceError(QString)));
     connect(voskRecognizer, SIGNAL(recognitionStarted()), this, SLOT(onVoiceRecognitionStarted()));
     connect(voskRecognizer, SIGNAL(recognitionStopped()), this, SLOT(onVoiceRecognitionStopped()));
+    connect(voskRecognizer, SIGNAL(initializationComplete()), this, SLOT(onVoiceInitializationComplete()));
 }
 
 void MainWindow::showWaitingDialog(const QString &title, const QString &message)
@@ -910,6 +1054,12 @@ void MainWindow::connectToBot()
         return;
     }
 
+    // 确保robot对象已创建
+    if (!robot) {
+        robot = new ElectronLowLevel();
+        connect(robot, SIGNAL(connectionStatusChanged(bool)), this, SLOT(onConnectionStatusChanged(bool)));
+    }
+
     if (!robot->Connect()) {
         showErrorDialog("连接失败", "无法连接到 ElectronBot。\n请检查设备是否已通过 USB 连接。");
         return;
@@ -929,6 +1079,10 @@ void MainWindow::onWaitingDialogClosed()
 
 void MainWindow::disconnectFromBot()
 {
+    if (!robot) {
+        return;
+    }
+
     showWaitingDialog("正在断开", "正在关闭 USB 连接...");
     btnConnect->setEnabled(false);
 
@@ -937,7 +1091,9 @@ void MainWindow::disconnectFromBot()
 
 void MainWindow::onDisconnectTimeout()
 {
-    robot->Disconnect();
+    if (robot) {
+        robot->Disconnect();
+    }
     hideWaitingDialog();
 }
 
@@ -956,20 +1112,26 @@ void MainWindow::onConnectionStatusChanged(bool connected)
         btnConnect->setText("断开连接");
         btnConnect->setGlowColor(QColor(255, 51, 102));
         btnConnect->setEnabled(true);
-        btnStartCapture->setEnabled(true);
+        btnCamera->setEnabled(true);
     } else {
         if (isConnecting) {
             return;
         }
 
-        stopCameraCapture();
+        if (isCameraCapturing) {
+            cameraCapture->stopCapture();
+            isCameraCapturing = false;
+            btnCamera->setText("开启摄像头");
+            btnCamera->setGlowColor(QColor(0, 255, 136));
+            videoPlayer->play();
+        }
         statusLed->setStatus(false);
         labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 12, 500));
         labelStatus->setText("未连接");
         btnConnect->setText("连接设备");
         btnConnect->setGlowColor(QColor(0, 212, 255));
         btnConnect->setEnabled(true);
-        btnStartCapture->setEnabled(false);
+        btnCamera->setEnabled(false);
     }
 }
 
@@ -983,43 +1145,83 @@ void MainWindow::onConnectFinished(bool success)
     }
 }
 
-void MainWindow::startCameraCapture()
+void MainWindow::onCameraClicked()
 {
     if (!isUsbConnected) {
         showErrorDialog("未连接", "请先连接 ElectronBot。");
         return;
     }
 
-    videoPlayer->pause();
-
-    if (!cameraCapture->startCapture()) {
+    if (isCameraCapturing) {
+        // 关闭摄像头时重启语音识别
+        cameraCapture->stopCapture();
+        isCameraCapturing = false;
+        btnCamera->setText("开启摄像头");
+        btnCamera->setGlowColor(QColor(0, 255, 136));
         videoPlayer->play();
-        showErrorDialog("摄像头错误", "无法访问摄像头。\n请检查摄像头是否已连接。");
-        return;
-    }
+        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
+        labelStatus->setText("已连接");
+        
+        // 重启语音识别
+        if (voskRecognizer && !voskRecognizer->isRunning()) {
+            voskRecognizer->start();
+        }
+    } else {
+        // 开启摄像头时停止语音识别
+        if (voskRecognizer && voskRecognizer->isRunning()) {
+            voskRecognizer->stop();
+        }
+        
+        btnCamera->setEnabled(false);
+        btnCamera->setText("正在开启...");
+        labelStatus->setStyleSheet(AppStyle::labelStyle("#FFB400", 12, 500));
+        labelStatus->setText("正在启动摄像头...");
+        videoPlayer->pause();
 
+        if (!cameraCapture->startCapture()) {
+            // 启动摄像头失败，恢复语音识别
+            if (voskRecognizer && !voskRecognizer->isRunning()) {
+                voskRecognizer->start();
+            }
+            videoPlayer->play();
+            btnCamera->setEnabled(true);
+            btnCamera->setText("开启摄像头");
+            labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
+            labelStatus->setText("已连接");
+            showErrorDialog("摄像头错误", "无法访问摄像头。\n请检查摄像头是否已连接。");
+        }
+    }
+}
+
+void MainWindow::onCameraCaptureStarted()
+{
     isCameraCapturing = true;
-    btnStartCapture->setEnabled(false);
-    btnStopCapture->setEnabled(true);
+    btnCamera->setEnabled(true);
+    btnCamera->setText("关闭摄像头");
+    btnCamera->setGlowColor(QColor(255, 184, 0));
     labelStatus->setStyleSheet(AppStyle::labelStyle("#00FF88", 12, 500));
     labelStatus->setText("捕获中");
 }
 
-void MainWindow::stopCameraCapture()
+void MainWindow::onCameraCaptureError(const QString &message)
 {
-    if (!isCameraCapturing) return;
+    if (isCameraCapturing) {
+        cameraCapture->stopCapture();
+        isCameraCapturing = false;
+    }
 
-    cameraCapture->stopCapture();
-    isCameraCapturing = false;
-    btnStartCapture->setEnabled(true);
-    btnStopCapture->setEnabled(false);
+    // 恢复语音识别
+    if (voskRecognizer && !voskRecognizer->isRunning()) {
+        voskRecognizer->start();
+    }
 
     videoPlayer->play();
-
-    if (isUsbConnected) {
-        labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
-        labelStatus->setText("已连接");
-    }
+    btnCamera->setEnabled(true);
+    btnCamera->setText("开启摄像头");
+    btnCamera->setGlowColor(QColor(0, 255, 136));
+    labelStatus->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 12, 500));
+    labelStatus->setText("已连接");
+    showErrorDialog("摄像头错误", message);
 }
 
 void MainWindow::onVideoFrameReady(const QImage &image)
@@ -1078,15 +1280,6 @@ void MainWindow::onResetClicked()
     }
 }
 
-void MainWindow::onVoiceControlClicked()
-{
-    if (isVoiceActive) {
-        voskRecognizer->stop();
-    } else {
-        voskRecognizer->start();
-    }
-}
-
 void MainWindow::onVoiceResultReady(const QString &text)
 {
     voiceResultLabel->setText(QString("语音: %1").arg(text));
@@ -1104,25 +1297,16 @@ void MainWindow::onVoiceError(const QString &message)
 {
     voiceResultLabel->setText(QString("语音错误: %1").arg(message));
     voiceResultLabel->setStyleSheet(AppStyle::labelStyle("#FF3366", 11, 500));
-    isVoiceActive = false;
-    btnVoiceControl->setText("语音控制");
-    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
 }
 
 void MainWindow::onVoiceRecognitionStarted()
 {
-    isVoiceActive = true;
-    btnVoiceControl->setText("停止语音");
-    btnVoiceControl->setGlowColor(QColor(255, 51, 102));
     voiceResultLabel->setText("语音: 正在监听...");
     voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 11, 500));
 }
 
 void MainWindow::onVoiceRecognitionStopped()
 {
-    isVoiceActive = false;
-    btnVoiceControl->setText("语音控制");
-    btnVoiceControl->setGlowColor(QColor(178, 102, 255));
     voiceResultLabel->setText("语音: 已停止");
     voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::textMutedColor, 11, 400));
 }
@@ -1135,29 +1319,37 @@ void MainWindow::processVoiceCommand(const QString &command)
         if (!isUsbConnected) connectToBot();
     } else if (cmd.contains("断开")) {
         if (isUsbConnected) disconnectFromBot();
-    } else if (cmd.contains("摄像头") || cmd.contains("开启")) {
-        if (isUsbConnected && !isCameraCapturing) startCameraCapture();
-    } else if (cmd.contains("停止") || cmd.contains("关闭")) {
-        if (isCameraCapturing) stopCameraCapture();
+    } else if (cmd.contains("摄像头")) {
+        onCameraClicked();
     } else if (cmd.contains("复位") || cmd.contains("归零")) {
         onResetClicked();
-    } else if (cmd.contains("一号") || cmd.contains("头部")) {
-        if (cmd.contains("左")) jointSliders[0]->setValue(jointSliders[0]->value() - 15);
-        else if (cmd.contains("右")) jointSliders[0]->setValue(jointSliders[0]->value() + 15);
-    } else if (cmd.contains("二号") || cmd.contains("左肩")) {
-        if (cmd.contains("上")) jointSliders[1]->setValue(jointSliders[1]->value() + 15);
-        else if (cmd.contains("下")) jointSliders[1]->setValue(jointSliders[1]->value() - 15);
-    } else if (cmd.contains("三号") || cmd.contains("左手")) {
-        if (cmd.contains("上")) jointSliders[2]->setValue(jointSliders[2]->value() + 15);
-        else if (cmd.contains("下")) jointSliders[2]->setValue(jointSliders[2]->value() - 15);
-    } else if (cmd.contains("四号") || cmd.contains("右肩")) {
-        if (cmd.contains("上")) jointSliders[3]->setValue(jointSliders[3]->value() + 15);
-        else if (cmd.contains("下")) jointSliders[3]->setValue(jointSliders[3]->value() - 15);
-    } else if (cmd.contains("五号") || cmd.contains("右手")) {
-        if (cmd.contains("上")) jointSliders[4]->setValue(jointSliders[4]->value() + 15);
-        else if (cmd.contains("下")) jointSliders[4]->setValue(jointSliders[4]->value() - 15);
-    } else if (cmd.contains("六号") || cmd.contains("底座")) {
-        if (cmd.contains("左")) jointSliders[5]->setValue(jointSliders[5]->value() - 15);
-        else if (cmd.contains("右")) jointSliders[5]->setValue(jointSliders[5]->value() + 15);
+    } else if (cmd.contains("你好") || cmd.contains("希特勒")) {
+        if (isUsbConnected) {
+            jointSliders[4]->setValue(90);
+            QTimer::singleShot(2000, this, [this]() {
+                jointSliders[4]->setValue(0);
+            });
+        }
     }
+}
+
+void MainWindow::onAudioDeviceChanged(int index)
+{
+    if (index < 0) return;
+
+    QAudioDeviceInfo deviceInfo = audioDeviceComboBox->itemData(index).value<QAudioDeviceInfo>();
+    voskRecognizer->setInputDevice(deviceInfo);
+}
+
+void MainWindow::onVolumeGainChanged(int value)
+{
+    qreal gain = value / 10.0;
+    volumeGainLabel->setText(QString("%1x").arg(gain, 0, 'f', 1));
+    voskRecognizer->setVolumeGain(gain);
+}
+
+void MainWindow::onVoiceInitializationComplete()
+{
+    voiceResultLabel->setText("语音: 正在监听...");
+    voiceResultLabel->setStyleSheet(AppStyle::labelStyle(AppStyle::successColor, 11, 400));
 }

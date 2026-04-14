@@ -3,12 +3,16 @@
 #include <QAudioDeviceInfo>
 #include <QCoreApplication>
 #include <QFile>
+#include <QDir>
 
 VoskRecognizer::VoskRecognizer(QObject *parent)
     : QObject(parent)
     , m_bridgeProcess(0)
     , m_audioInput(0)
     , m_audioDevice(0)
+    , m_volumeGain(2.0)
+    , m_initialized(false)
+    , m_initializing(false)
     , m_running(false)
     , m_bridgeReady(false)
 {
@@ -16,102 +20,7 @@ VoskRecognizer::VoskRecognizer(QObject *parent)
 
 VoskRecognizer::~VoskRecognizer()
 {
-    stop();
-}
-
-void VoskRecognizer::setModelPath(const QString &path)
-{
-    m_modelPath = path;
-}
-
-bool VoskRecognizer::isRunning() const
-{
-    return m_running;
-}
-
-void VoskRecognizer::start()
-{
-    if (m_running) return;
-
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString bridgeExe = appDir + "/vosk/vosk_bridge.exe";
-
-    if (!QFile::exists(bridgeExe)) {
-        emit errorOccurred(QString("找不到语音桥接程序: %1").arg(bridgeExe));
-        return;
-    }
-
-    if (!QFile::exists(m_modelPath)) {
-        emit errorOccurred(QString("找不到语音模型: %1").arg(m_modelPath));
-        return;
-    }
-
-    m_bridgeProcess = new QProcess(this);
-    m_bridgeProcess->setWorkingDirectory(appDir + "/vosk");
-    m_bridgeProcess->setProcessChannelMode(QProcess::MergedChannels);
-
-    connect(m_bridgeProcess, SIGNAL(readyRead()), this, SLOT(onBridgeReadyRead()));
-    connect(m_bridgeProcess, SIGNAL(error(QProcess::ProcessError)), this, SLOT(onBridgeError(QProcess::ProcessError)));
-    connect(m_bridgeProcess, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(onBridgeFinished(int,QProcess::ExitStatus)));
-
-    m_bridgeReady = false;
-    m_buffer.clear();
-    m_bridgeProcess->start(bridgeExe, QStringList() << m_modelPath);
-
-    if (!m_bridgeProcess->waitForStarted(5000)) {
-        emit errorOccurred(QString("无法启动语音桥接程序: %1").arg(m_bridgeProcess->errorString()));
-        m_bridgeProcess->deleteLater();
-        m_bridgeProcess = 0;
-        return;
-    }
-
-    QAudioFormat format;
-    format.setSampleRate(16000);
-    format.setChannelCount(1);
-    format.setSampleSize(16);
-    format.setSampleType(QAudioFormat::SignedInt);
-    format.setByteOrder(QAudioFormat::LittleEndian);
-    format.setCodec("audio/pcm");
-
-    QAudioDeviceInfo deviceInfo = QAudioDeviceInfo::defaultInputDevice();
-    
-    if (deviceInfo.isNull()) {
-        m_bridgeProcess->kill();
-        m_bridgeProcess->waitForFinished(3000);
-        m_bridgeProcess->deleteLater();
-        m_bridgeProcess = 0;
-        emit errorOccurred("未找到麦克风设备");
-        return;
-    }
-
-    if (!deviceInfo.isFormatSupported(format)) {
-        format = deviceInfo.nearestFormat(format);
-    }
-
-    m_audioInput = new QAudioInput(deviceInfo, format, this);
-    m_audioDevice = m_audioInput->start();
-
-    if (!m_audioDevice) {
-        delete m_audioInput;
-        m_audioInput = 0;
-        m_bridgeProcess->kill();
-        m_bridgeProcess->waitForFinished(3000);
-        m_bridgeProcess->deleteLater();
-        m_bridgeProcess = 0;
-        emit errorOccurred("无法启动麦克风");
-        return;
-    }
-
-    connect(m_audioDevice, SIGNAL(readyRead()), this, SLOT(onAudioDataReady()));
-
-    m_running = true;
-    emit recognitionStarted();
-}
-
-void VoskRecognizer::stop()
-{
-    if (!m_running) return;
-
+    // 先停止运行
     m_running = false;
     m_bridgeReady = false;
 
@@ -134,12 +43,178 @@ void VoskRecognizer::stop()
     }
 
     m_buffer.clear();
+    m_initialized = false;
+    m_initializing = false;
+}
+
+void VoskRecognizer::setModelPath(const QString &path)
+{
+    m_modelPath = path;
+}
+
+void VoskRecognizer::setInputDevice(const QAudioDeviceInfo &deviceInfo)
+{
+    m_inputDevice = deviceInfo;
+}
+
+void VoskRecognizer::setVolumeGain(qreal gain)
+{
+    m_volumeGain = gain;
+    if (m_audioInput) {
+        m_audioInput->setVolume(gain);
+    }
+}
+
+QList<QAudioDeviceInfo> VoskRecognizer::availableInputDevices() const
+{
+    return QAudioDeviceInfo::availableDevices(QAudio::AudioInput);
+}
+
+void VoskRecognizer::initialize()
+{
+    if (m_initialized || m_initializing) return;
+
+    m_initializing = true;
+
+    if (!startBridgeProcess()) {
+        m_initializing = false;
+        return;
+    }
+}
+
+bool VoskRecognizer::startBridgeProcess()
+{
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString bridgeExe = appDir + "/vosk/vosk_bridge.exe";
+
+    if (!QFile::exists(bridgeExe)) {
+        emit errorOccurred(QString("找不到语音桥接程序: %1").arg(bridgeExe));
+        return false;
+    }
+
+    if (!QFile::exists(m_modelPath)) {
+        emit errorOccurred(QString("找不到语音模型: %1").arg(m_modelPath));
+        return false;
+    }
+
+    m_bridgeProcess = new QProcess(this);
+    if (!m_bridgeProcess) {
+        emit errorOccurred("无法创建桥接进程");
+        return false;
+    }
+
+    m_bridgeProcess->setWorkingDirectory(appDir + "/vosk");
+    m_bridgeProcess->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(m_bridgeProcess, SIGNAL(readyRead()), this, SLOT(onBridgeReadyRead()));
+    connect(m_bridgeProcess, SIGNAL(error(QProcess::ProcessError)), this, SLOT(onBridgeError(QProcess::ProcessError)));
+    connect(m_bridgeProcess, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(onBridgeFinished(int,QProcess::ExitStatus)));
+
+    m_bridgeReady = false;
+    m_buffer.clear();
+    m_bridgeProcess->start(bridgeExe, QStringList() << m_modelPath);
+
+    if (!m_bridgeProcess->waitForStarted(5000)) {
+        emit errorOccurred("无法启动语音桥接程序");
+        m_bridgeProcess->deleteLater();
+        m_bridgeProcess = 0;
+        return false;
+    }
+
+    return true;
+}
+
+bool VoskRecognizer::startAudioInput()
+{
+    QAudioFormat format;
+    format.setSampleRate(16000);
+    format.setChannelCount(1);
+    format.setSampleSize(16);
+    format.setSampleType(QAudioFormat::SignedInt);
+    format.setByteOrder(QAudioFormat::LittleEndian);
+    format.setCodec("audio/pcm");
+
+    QAudioDeviceInfo deviceInfo = m_inputDevice;
+
+    if (deviceInfo.isNull()) {
+        deviceInfo = QAudioDeviceInfo::defaultInputDevice();
+    }
+
+    if (deviceInfo.isNull()) {
+        emit errorOccurred("未找到麦克风设备");
+        return false;
+    }
+
+    if (!deviceInfo.isFormatSupported(format)) {
+        format = deviceInfo.nearestFormat(format);
+    }
+
+    m_audioInput = new QAudioInput(deviceInfo, format, this);
+    m_audioInput->setVolume(m_volumeGain);
+    m_audioDevice = m_audioInput->start();
+
+    if (!m_audioDevice) {
+        delete m_audioInput;
+        m_audioInput = 0;
+        emit errorOccurred("无法启动麦克风");
+        return false;
+    }
+
+    connect(m_audioDevice, SIGNAL(readyRead()), this, SLOT(onAudioDataReady()));
+
+    return true;
+}
+
+void VoskRecognizer::start()
+{
+    if (m_running) return;
+
+    if (!m_initialized) {
+        initialize();
+        return;
+    }
+
+    if (!startAudioInput()) {
+        return;
+    }
+
+    m_running = true;
+    emit recognitionStarted();
+}
+
+void VoskRecognizer::stop()
+{
+    if (!m_running) return;
+
+    m_running = false;
+
+    if (m_audioInput) {
+        m_audioInput->stop();
+        delete m_audioInput;
+        m_audioInput = 0;
+        m_audioDevice = 0;
+    }
+
     emit recognitionStopped();
+}
+
+void VoskRecognizer::pauseAudio()
+{
+    if (m_audioInput && m_running) {
+        m_audioInput->suspend();
+    }
+}
+
+void VoskRecognizer::resumeAudio()
+{
+    if (m_audioInput && m_running) {
+        m_audioInput->resume();
+    }
 }
 
 void VoskRecognizer::onAudioDataReady()
 {
-    if (!m_running || !m_audioDevice || !m_bridgeProcess) return;
+    if (!m_running || !m_audioDevice || !m_bridgeProcess || !m_bridgeReady) return;
 
     QByteArray data = m_audioDevice->readAll();
     if (data.isEmpty()) return;
@@ -196,6 +271,19 @@ void VoskRecognizer::tryParseJson()
 
         if (type == "ready") {
             m_bridgeReady = true;
+
+            if (m_initializing) {
+                if (!startAudioInput()) {
+                    stop();
+                    return;
+                }
+
+                m_initialized = true;
+                m_initializing = false;
+                m_running = true;
+                emit initializationComplete();
+                emit recognitionStarted();
+            }
         } else if (type == "error") {
             emit errorOccurred(obj.value("message").toString());
         } else if (obj.contains("text")) {
@@ -226,7 +314,7 @@ void VoskRecognizer::onBridgeFinished(int exitCode, QProcess::ExitStatus exitSta
 {
     Q_UNUSED(exitCode);
     Q_UNUSED(exitStatus);
-    
+
     if (m_running) {
         m_running = false;
         m_bridgeReady = false;
@@ -244,6 +332,14 @@ void VoskRecognizer::onBridgeFinished(int exitCode, QProcess::ExitStatus exitSta
         }
 
         m_buffer.clear();
+        m_initialized = false;
+        m_initializing = false;
         emit recognitionStopped();
+    } else if (m_bridgeProcess) {
+        // 桥接程序在非运行状态下结束，清理资源
+        m_bridgeProcess->deleteLater();
+        m_bridgeProcess = 0;
+        m_initialized = false;
+        m_bridgeReady = false;
     }
 }

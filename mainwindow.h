@@ -39,10 +39,10 @@
 #include <QDialog>
 #include <QProgressBar>
 #include <QMessageBox>
+#include <QComboBox>
 #include <QCamera>
 #include <QCameraInfo>
 #include <QCameraImageCapture>
-#include <QCameraViewfinderSettings>
 
 #include "ffmpegvideoplayer.h"
 #include "electron_low_level.h"
@@ -206,9 +206,12 @@ public:
 
 signals:
     void frameReady(const QImage &image);
+    void captureError(const QString &message);
+    void captureStarted();
 
 private slots:
     void onCameraStateChanged(QCamera::State state);
+    void onCameraError(QCamera::Error error);
     void onImageCaptured(int id, const QImage &image);
     void onCaptureTimeout();
 
@@ -216,6 +219,7 @@ private:
     QCamera *m_camera;
     QCameraImageCapture *m_imageCapture;
     bool m_capturing;
+    bool m_capturePending;
     QLabel *m_displayLabel;
     QTimer *m_captureTimer;
     QImage m_lastFrame;
@@ -235,8 +239,9 @@ protected:
 private slots:
     void connectToBot();
     void disconnectFromBot();
-    void startCameraCapture();
-    void stopCameraCapture();
+    void onCameraClicked();
+    void onCameraCaptureStarted();
+    void onCameraCaptureError(const QString &message);
     void onVideoFrameReady(const QImage &image);
     void onCameraFrameReady(const QImage &image);
     void onConnectionStatusChanged(bool connected);
@@ -245,13 +250,15 @@ private slots:
     void onDisconnectTimeout();
     void onSliderValueChanged(int value);
     void onResetClicked();
-    void onVoiceControlClicked();
     void onVoiceResultReady(const QString &text);
     void onVoicePartialResult(const QString &text);
     void onVoiceError(const QString &message);
     void onVoiceRecognitionStarted();
     void onVoiceRecognitionStopped();
     void processVoiceCommand(const QString &command);
+    void onAudioDeviceChanged(int index);
+    void onVolumeGainChanged(int value);
+    void onVoiceInitializationComplete();
 
 private:
     void setupUI();
@@ -270,12 +277,13 @@ private:
     QLabel *videoDisplayLabel;
 
     GlowingButton *btnConnect;
-    GlowingButton *btnStartCapture;
-    GlowingButton *btnStopCapture;
+    GlowingButton *btnCamera;
     GlowingButton *btnReset;
-    GlowingButton *btnVoiceControl;
 
     QLabel *voiceResultLabel;
+    QComboBox *audioDeviceComboBox;
+    QSlider *volumeGainSlider;
+    QLabel *volumeGainLabel;
 
     QSlider *jointSliders[6];
     QLabel *jointValueLabels[6];
@@ -290,7 +298,6 @@ private:
     bool isUsbConnected;
     bool isCameraCapturing;
     bool isConnecting;
-    bool isVoiceActive;
 
     WaitingDialog *waitingDialog;
 };

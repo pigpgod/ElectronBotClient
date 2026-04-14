@@ -39,7 +39,7 @@ INCLUDEPATH += $${FFMPEG_PATH}/include
 INCLUDEPATH += $${LIBUSBWIN32_PATH}/include
 
 VOSK_PATH = $$PWD/3rdparty/vosk
-VOSK_MODEL_PATH = $$PWD/3rdparty/vosk-models/vosk-model-small-cn-0.3
+VOSK_MODEL_PATH = $$PWD/3rdparty/vosk-models/vosk-model-cn-0.22
 
 win32: LIBS += -L$${FFMPEG_PATH}/lib \
     -lavcodec -lavformat -lavutil -lavfilter -lswscale -lswresample \
@@ -65,5 +65,5 @@ win32: QMAKE_POST_LINK += \
     if not exist \"$$OUT_PWD\\debug\\vosk\" mkdir \"$$OUT_PWD\\debug\\vosk\" & \
     copy /Y \"$${VOSK_PATH}\\bin\\*.dll\" \"$$OUT_PWD\\debug\\vosk\\\" & \
     copy /Y \"$$PWD\\vosk_bridge.exe\" \"$$OUT_PWD\\debug\\vosk\\\" & \
-    if not exist \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-small-cn-0.3\" mkdir \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-small-cn-0.3\" & \
-    xcopy /Y /E \"$${VOSK_MODEL_PATH}\\*\" \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-small-cn-0.3\\\"
+    if not exist \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-cn-0.22\" mkdir \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-cn-0.22\" & \
+    xcopy /Y /E \"$${VOSK_MODEL_PATH}\\*\" \"$$OUT_PWD\\debug\\vosk-models\\vosk-model-cn-0.22\\\"
